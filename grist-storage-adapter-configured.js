@@ -1,90 +1,69 @@
 /**
  * ============================================================
- *  GRIST STORAGE ADAPTER — Phase 1
- *  Remplace localStorage par des appels à l'API Grist
- *  Table Grist requise : AppData (colonnes: cle, valeur)
- * ============================================================
- *
- *  INSTALLATION :
- *  1. Dans Grist, créer une table "AppData" avec deux colonnes :
- *       - cle    (type Texte)
- *       - valeur (type Texte)
- *  2. Générer une clé API dans Grist :
- *       Profil → Clé API → Copier
- *  3. Trouver l'ID du document Grist (dans l'URL)
- *  4. Renseigner GRIST_CONFIG ci-dessous
- *  5. Inclure ce fichier AVANT le script principal de l'app :
- *       <script src="grist-storage-adapter.js"></script>
- *
+ *  GRIST STORAGE ADAPTER — Phase 1 (API native Grist)
+ *  Utilise grist.docApi au lieu de fetch + clé API
+ *  Pas de problème CORS car API interne au widget
  * ============================================================
  */
 
-const GRIST_CONFIG = {
-  baseUrl:   "https://grist.numerique.gouv.fr",
-  docId:     "xiZBNHXKX3fK",  // ex: "3NsoHE2AF5vQ..."
-  apiKey:    "a82f84e2ead33cc2650123aad87f0ea41c01bc9b",       // ex: "8c8c9e1f2a3b..."
-  tableName: "AppData"
-};
+const GRIST_TABLE = "AppData";
 
-// ============================================================
-//  COUCHE CACHE LOCAL
-//  Pour éviter trop d'appels API et garder la réactivité
-// ============================================================
-const _gristCache = {};      // cache en mémoire : clé → valeur JSON
-const _gristRowIds = {};     // cache des IDs de lignes Grist : clé → rowId
-let   _gristReady = false;   // true quand les données initiales sont chargées
+// Cache en mémoire
+const _gristCache   = {};
+const _gristRowIds  = {};
+let   _gristReady   = false;
 let   _gristInitPromise = null;
 
 // ============================================================
-//  FONCTIONS UTILITAIRES
+//  INITIALISATION — charge toutes les clés depuis Grist
 // ============================================================
-
-function _gristHeaders() {
-  return {
-    "Content-Type":  "application/json",
-    "Authorization": "Bearer " + GRIST_CONFIG.apiKey
-  };
-}
-
-function _gristTableUrl() {
-  return GRIST_CONFIG.baseUrl
-    + "/api/docs/" + GRIST_CONFIG.docId
-    + "/tables/" + GRIST_CONFIG.tableName
-    + "/records";
-}
-
-// ============================================================
-//  INITIALISATION : charge toutes les clés depuis Grist
-//  À appeler au démarrage de l'app (une seule fois)
-// ============================================================
-
 async function gristInitStorage() {
   if (_gristInitPromise) return _gristInitPromise;
 
   _gristInitPromise = (async () => {
     try {
-      const resp = await fetch(_gristTableUrl(), {
-        headers: _gristHeaders()
+      // Attendre que l'API Grist soit disponible
+      await new Promise((resolve) => {
+        if (typeof grist !== "undefined") { resolve(); return; }
+        const interval = setInterval(() => {
+          if (typeof grist !== "undefined") {
+            clearInterval(interval);
+            resolve();
+          }
+        }, 100);
+        // Timeout après 5 secondes
+        setTimeout(() => { clearInterval(interval); resolve(); }, 5000);
       });
-      if (!resp.ok) throw new Error("Grist init HTTP " + resp.status);
 
-      const data = await resp.json();
-      const records = data.records || [];
+      if (typeof grist === "undefined") {
+        throw new Error("API Grist non disponible");
+      }
 
-      records.forEach(rec => {
-        const cle    = rec.fields.cle    || rec.fields.Cle    || "";
-        const valeur = rec.fields.valeur || rec.fields.Valeur || "";
+      // Initialiser le widget Grist
+      grist.ready({ requiredAccess: "full" });
+
+      // Lire toutes les lignes de la table AppData
+      const records = await grist.docApi.fetchTable(GRIST_TABLE);
+
+      // records est un objet { id: [...], cle: [...], valeur: [...] }
+      const ids    = records.id    || [];
+      const cles   = records.cle   || records.Cle   || [];
+      const valeurs= records.valeur|| records.Valeur || [];
+
+      ids.forEach((id, i) => {
+        const cle    = String(cles[i]    || "");
+        const valeur = String(valeurs[i] || "");
         if (cle) {
-          _gristCache[cle]   = valeur;
-          _gristRowIds[cle]  = rec.id;
+          _gristCache[cle]  = valeur;
+          _gristRowIds[cle] = id;
         }
       });
 
       _gristReady = true;
-      console.log("[GristAdapter] Initialisé —", records.length, "clés chargées");
+      console.log("[GristAdapter] Initialisé —", ids.length, "clés chargées");
+
     } catch (err) {
-      console.error("[GristAdapter] Erreur init :", err);
-      // Fallback : continuer avec localStorage si Grist inaccessible
+      console.warn("[GristAdapter] Erreur init, fallback localStorage :", err.message);
       _gristReady = false;
     }
   })();
@@ -93,79 +72,51 @@ async function gristInitStorage() {
 }
 
 // ============================================================
-//  GET : lecture (synchrone depuis le cache)
+//  GET — lecture depuis le cache
 // ============================================================
-
 function gristGetItem(cle) {
-  if (!_gristReady) {
-    // Fallback localStorage pendant l'initialisation
-    return localStorage.getItem(cle);
-  }
+  if (!_gristReady) return localStorage.getItem(cle);
   return Object.prototype.hasOwnProperty.call(_gristCache, cle)
     ? _gristCache[cle]
     : null;
 }
 
 // ============================================================
-//  SET : écriture (async, avec mise à jour du cache immédiate)
+//  SET — écriture dans Grist via docApi
 // ============================================================
-
 async function gristSetItem(cle, valeur) {
-  // Mise à jour du cache immédiatement pour que l'UI reste réactive
-  _gristCache[cle] = valeur;
+  _gristCache[cle] = valeur; // cache immédiat
 
   if (!_gristReady) {
-    // Fallback localStorage
     localStorage.setItem(cle, valeur);
     return;
   }
 
   try {
     if (_gristRowIds[cle]) {
-      // La clé existe déjà → PATCH (mise à jour)
-      const url = GRIST_CONFIG.baseUrl
-        + "/api/docs/" + GRIST_CONFIG.docId
-        + "/tables/" + GRIST_CONFIG.tableName
-        + "/records";
-
-      await fetch(url, {
-        method:  "PATCH",
-        headers: _gristHeaders(),
-        body: JSON.stringify({
-          records: [{
-            id:     _gristRowIds[cle],
-            fields: { cle: cle, valeur: valeur }
-          }]
-        })
-      });
+      // Mise à jour ligne existante
+      await grist.docApi.applyUserActions([
+        ["UpdateRecord", GRIST_TABLE, _gristRowIds[cle], { cle, valeur }]
+      ]);
     } else {
-      // Nouvelle clé → POST (création)
-      const resp = await fetch(_gristTableUrl(), {
-        method:  "POST",
-        headers: _gristHeaders(),
-        body: JSON.stringify({
-          records: [{
-            fields: { cle: cle, valeur: valeur }
-          }]
-        })
-      });
-      if (resp.ok) {
-        const data = await resp.json();
-        const newId = (data.records && data.records[0]) ? data.records[0].id : null;
-        if (newId) _gristRowIds[cle] = newId;
+      // Nouvelle ligne
+      const result = await grist.docApi.applyUserActions([
+        ["AddRecord", GRIST_TABLE, null, { cle, valeur }]
+      ]);
+      // Récupérer le nouvel ID
+      if (result && result.retValues && result.retValues[0]) {
+        _gristRowIds[cle] = result.retValues[0];
       }
     }
   } catch (err) {
     console.error("[GristAdapter] Erreur setItem :", cle, err);
-    // Fallback localStorage en cas d'erreur réseau
     localStorage.setItem(cle, valeur);
   }
 }
 
 // ============================================================
-//  REMOVE : suppression d'une clé
+//  REMOVE — suppression dans Grist
 // ============================================================
-
 async function gristRemoveItem(cle) {
   delete _gristCache[cle];
 
@@ -175,17 +126,9 @@ async function gristRemoveItem(cle) {
   }
 
   try {
-    await fetch(
-      GRIST_CONFIG.baseUrl
-        + "/api/docs/" + GRIST_CONFIG.docId
-        + "/tables/" + GRIST_CONFIG.tableName
-        + "/records",
-      {
-        method:  "DELETE",
-        headers: _gristHeaders(),
-        body: JSON.stringify({ records: [{ id: _gristRowIds[cle] }] })
-      }
-    );
+    await grist.docApi.applyUserActions([
+      ["RemoveRecord", GRIST_TABLE, _gristRowIds[cle]]
+    ]);
     delete _gristRowIds[cle];
   } catch (err) {
     console.error("[GristAdapter] Erreur removeItem :", cle, err);
@@ -194,43 +137,34 @@ async function gristRemoveItem(cle) {
 }
 
 // ============================================================
-//  REMPLACEMENT DE localStorage
-//  Surcharge l'objet localStorage global avec les fonctions Grist
-//  ATTENTION : getItem reste synchrone (lecture depuis le cache)
-//              setItem/removeItem sont async en arrière-plan
+//  OVERRIDE localStorage
 // ============================================================
-
 function gristInstallStorageOverride() {
-  const _originalStorage = {
+  const _orig = {
     getItem:    localStorage.getItem.bind(localStorage),
     setItem:    localStorage.setItem.bind(localStorage),
     removeItem: localStorage.removeItem.bind(localStorage)
   };
 
-  // Surcharge getItem — synchrone (cache en mémoire)
   Storage.prototype.getItem = function(cle) {
-    if (!_gristReady) return _originalStorage.getItem(cle);
+    if (!_gristReady) return _orig.getItem(cle);
     return gristGetItem(cle);
   };
 
-  // Surcharge setItem — lance l'écriture async en arrière-plan
   Storage.prototype.setItem = function(cle, valeur) {
-    gristSetItem(cle, String(valeur)); // non-bloquant
+    gristSetItem(cle, String(valeur));
   };
 
-  // Surcharge removeItem
   Storage.prototype.removeItem = function(cle) {
-    gristRemoveItem(cle); // non-bloquant
+    gristRemoveItem(cle);
   };
 
   console.log("[GristAdapter] Override localStorage installé");
 }
 
 // ============================================================
-//  POINT D'ENTRÉE PRINCIPAL
-//  À appeler au chargement de la page, avant renderAllPanels()
+//  POINT D'ENTRÉE
 // ============================================================
-
 async function gristStorageInit() {
   gristInstallStorageOverride();
   await gristInitStorage();
@@ -238,12 +172,10 @@ async function gristStorageInit() {
 }
 
 // ============================================================
-//  UTILITAIRE : migration one-shot localStorage → Grist
-//  À appeler UNE SEULE FOIS pour migrer les données existantes
+//  MIGRATION one-shot localStorage → Grist
 // ============================================================
-
 async function gristMigrateFromLocalStorage() {
-  const keysToMigrate = [
+  const keys = [
     "brigade-rep-toulouse-brigadier-v66-corrige",
     "brigade-rep-toulouse-absences-v1",
     "brigade-rep-toulouse-punctual-missions-v1",
@@ -252,9 +184,8 @@ async function gristMigrateFromLocalStorage() {
     "brigade-rep-toulouse-school-year-configs-v1",
     "brigade-rep-toulouse-active-school-year-v1"
   ];
-
   let migrated = 0;
-  for (const cle of keysToMigrate) {
+  for (const cle of keys) {
     const valeur = localStorage.getItem(cle);
     if (valeur !== null) {
       await gristSetItem(cle, valeur);
