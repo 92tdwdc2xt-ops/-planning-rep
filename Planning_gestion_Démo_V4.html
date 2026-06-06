@@ -6616,21 +6616,10 @@ function readAbsenceForm(){
     return d.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
   }
 
-  function getMissionForSlot(brigadierName, dateStr, slot) {
-    const missions = (typeof punctualMissions !== 'undefined' ? punctualMissions : []);
-    const nSlot = normalizeSlot(slot);
-    const nName = (brigadierName || '').toLowerCase().trim();
-    return missions.find(m => {
-      const mSlot = normalizeSlot(m.slot || '');
-      const mName = (m.brigadier || '').toLowerCase().trim();
-      return m.date === dateStr && mSlot === nSlot && mName === nName;
-    });
-  }
-
-  function getFormationsForSlot(dateStr, slot) {
-    const fms = (typeof formations !== 'undefined' ? formations : []);
-    const nSlot = normalizeSlot(slot);
-    return fms.filter(f => f.date === dateStr && normalizeSlot(f.slot || '') === nSlot);
+  function getMissionsForSlot(brigadierName, dateStr, slot) {
+    if (typeof getMissionsForBrigadierBetweenDates !== 'function') return [];
+    const all = getMissionsForBrigadierBetweenDates(brigadierName, dateStr, dateStr);
+    return all.filter(m => normalizeSlot(m.slot || '') === normalizeSlot(slot));
   }
 
   function getFormationForSlot(dateStr, slot) {
@@ -6641,13 +6630,7 @@ function readAbsenceForm(){
     );
   }
 
-  function getAbsenceForSlot(brigadierName, dateStr, slot) {
-    const abs = (typeof absences !== 'undefined' ? absences : []);
-    return abs.find(a =>
-      (a.brigadier || '').toLowerCase() === (brigadierName || '').toLowerCase() &&
-      (typeof absenceCovers === 'function' ? absenceCovers(a, dateStr, slot) : false)
-    );
-  }
+
 
   function getReferenceSchool(brigadierName) {
     const refs = (typeof referenceAssignments !== 'undefined' ? referenceAssignments : []);
@@ -6667,34 +6650,51 @@ function readAbsenceForm(){
   }
 
   function renderSlot(brigadierName, dateStr, slotKey, slotLabel) {
-    const absence = getAbsenceForSlot(brigadierName, dateStr, slotKey);
-    if (absence) {
+    const missions = getMissionsForSlot(brigadierName, dateStr, slotKey);
+
+    if (!missions.length) {
+      // Vérifier absence
+      const abs = (typeof absences !== 'undefined' ? absences : []);
+      const absence = abs.find(a =>
+        (a.brigadier || '') === brigadierName &&
+        (typeof absenceCovers === 'function' ? absenceCovers(a, dateStr, slotKey) : false)
+      );
+      if (absence) {
+        return `<div class="rmp-slot">
+          <div class="rmp-slot-label">${slotLabel}</div>
+          <div class="rmp-slot-content"><div class="rmp-slot-absence">🤒 Absence</div></div>
+        </div>`;
+      }
       return `<div class="rmp-slot">
         <div class="rmp-slot-label">${slotLabel}</div>
-        <div class="rmp-slot-content"><div class="rmp-slot-absence">🤒 Absence</div></div>
+        <div class="rmp-slot-content"><div class="rmp-slot-empty">—</div></div>
       </div>`;
     }
-    const mission = getMissionForSlot(brigadierName, dateStr, slotKey);
-    if (mission) {
-      const detail = [mission.level, mission.replaced_teacher_name ? `(${mission.replaced_teacher_name})` : ''].filter(Boolean).join(' ');
-      return `<div class="rmp-slot">
-        <div class="rmp-slot-label">${slotLabel}</div>
-        <div class="rmp-slot-content">
-          <div class="rmp-slot-school">🏫 ${mission.school || ''}</div>
-          ${detail ? `<div class="rmp-slot-detail">${detail}</div>` : ''}
-        </div>
-      </div>`;
-    }
-    const formation = getFormationForSlot(dateStr, slotKey);
-    if (formation) {
-      return `<div class="rmp-slot">
-        <div class="rmp-slot-label">${slotLabel}</div>
-        <div class="rmp-slot-content"><div class="rmp-slot-formation">📚 ${formation.title || 'Formation'}${formation.location ? ' — ' + formation.location : ''}</div></div>
-      </div>`;
-    }
+
+    // Afficher les missions
+    const items = missions.map(m => {
+      if (m.punctual_mission) {
+        // Mission ponctuelle
+        const detail = [m.level, m.replaced_teacher_name ? '(' + m.replaced_teacher_name + ')' : ''].filter(Boolean).join(' ');
+        return `<div class="rmp-slot-school">🏫 ${m.school || ''}</div>
+                ${detail ? '<div class="rmp-slot-detail">' + detail + '</div>' : ''}
+                ${m.punctual_title ? '<div class="rmp-slot-detail">' + m.punctual_title + '</div>' : ''}`;
+      } else {
+        // Pondération / Formation
+        const school = m.school || '';
+        const level = m.level || '';
+        const title = m.title || m.displayTitle || 'Formation';
+        if (school) {
+          return `<div class="rmp-slot-school">🏫 ${school}</div>
+                  ${level ? '<div class="rmp-slot-detail">' + level + '</div>' : ''}`;
+        }
+        return `<div class="rmp-slot-formation">📚 ${title}</div>`;
+      }
+    }).join('');
+
     return `<div class="rmp-slot">
       <div class="rmp-slot-label">${slotLabel}</div>
-      <div class="rmp-slot-content"><div class="rmp-slot-empty">—</div></div>
+      <div class="rmp-slot-content">${items}</div>
     </div>`;
   }
 
@@ -6715,8 +6715,8 @@ function readAbsenceForm(){
           ${formatDayLabel(d)}
           ${isToday ? '<span class="rmp-today-badge">Auj.</span>' : ''}
         </div>
-        ${renderSlot(brigadierName, dateStr, 'Matin', 'Matin')}
-        ${renderSlot(brigadierName, dateStr, 'APM', 'APM')}
+        ${renderSlot(brigadierName, dateStr, 'matin', 'Matin')}
+        ${renderSlot(brigadierName, dateStr, 'apm', 'APM')}
       </div>`;
     });
 
