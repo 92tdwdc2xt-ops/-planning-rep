@@ -6113,6 +6113,7 @@ function readAbsenceForm(){
           '<button type="button" class="role-choice-btn" id="enterGestionnaireBtn"><span class="icon">🗂️</span><span>Gestionnaire</span></button>' +
           '<button type="button" class="role-choice-btn secondary" id="enterOperatriceBtn"><span class="icon">📋</span><span>Opératrice</span></button>' +
           '<button type="button" class="role-choice-btn remplacant" id="enterRemplacantBtn"><span class="icon">📱</span><span>Remplaçant·e</span></button>' +
+          '<button type="button" class="role-choice-btn direction" id="enterDirectionBtn"><span class="icon">🏫</span><span>Direction</span></button>' +
         '</div>' +
       '</div>';
     document.body.insertBefore(home, wrap);
@@ -6132,6 +6133,7 @@ function readAbsenceForm(){
     document.getElementById('enterGestionnaireBtn').addEventListener('click', function(){ enterRole('gestionnaire'); });
     document.getElementById('enterOperatriceBtn').addEventListener('click', function(){ enterRole('operatrice'); });
     document.getElementById('enterRemplacantBtn').addEventListener('click', function(){ enterRemplacantView(); });
+    document.getElementById('enterDirectionBtn').addEventListener('click', function(){ enterDirectionView(); });
   }
 
   function cardTitle(card){
@@ -6367,6 +6369,75 @@ function readAbsenceForm(){
   remplacantStyle.textContent = `
     .role-choice-btn.remplacant { background: #1a6b4a; color: #fff; }
     .role-choice-btn.remplacant:hover { background: #145c3e; }
+    .role-choice-btn.direction { background: #1a4a6b; color: #fff; }
+    .role-choice-btn.direction:hover { background: #153d5c; }
+
+    #directionScreen {
+      display: none;
+      min-height: 100vh;
+      background: #f5f7fa;
+      font-family: system-ui, sans-serif;
+    }
+    #directionScreen.active { display: block; }
+    .dir-header {
+      background: #1a4a6b;
+      color: #fff;
+      padding: 16px 20px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+    .dir-header h1 { font-size: 1.1rem; margin: 0; flex: 1; }
+    .dir-back-btn {
+      background: rgba(255,255,255,0.2);
+      border: none;
+      color: #fff;
+      border-radius: 8px;
+      padding: 6px 12px;
+      cursor: pointer;
+      font-size: 0.9rem;
+    }
+    .dir-body { padding: 20px; }
+    .dir-controls {
+      background: #fff;
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 20px;
+      display: flex;
+      gap: 16px;
+      align-items: flex-end;
+      flex-wrap: wrap;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+    }
+    .dir-controls label { font-size: 0.85rem; color: #555; display: block; margin-bottom: 4px; }
+    .dir-controls select, .dir-controls input {
+      padding: 8px 12px;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      font-size: 0.95rem;
+    }
+    .dir-controls select:focus, .dir-controls input:focus { border-color: #1a4a6b; outline: none; }
+    .dir-btn {
+      background: #1a4a6b;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      padding: 8px 20px;
+      cursor: pointer;
+      font-size: 0.95rem;
+    }
+    .dir-btn:hover { background: #153d5c; }
+    .dir-results { background: #fff; border-radius: 12px; padding: 16px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); }
+    .dir-results h2 { font-size: 1rem; margin: 0 0 4px 0; }
+    .dir-results .dir-meta { font-size: 0.85rem; color: #888; margin-bottom: 16px; }
+    .dir-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+    .dir-table th { background: #f0f4f8; padding: 10px 12px; text-align: left; font-weight: 600; color: #444; }
+    .dir-table td { padding: 10px 12px; border-bottom: 1px solid #f0f0f0; }
+    .dir-table tr:last-child td { border-bottom: none; }
+    .dir-table tr:hover td { background: #f8fbff; }
 
     #remplacantScreen {
       display: none;
@@ -6798,6 +6869,125 @@ function readAbsenceForm(){
   });
 
   window.showRmpPlanning = showRmpPlanning;
+
+  // ─── VUE DIRECTION D'ÉCOLE ───────────────────────────────────────────────────
+
+  const directionScreen = document.createElement('div');
+  directionScreen.id = 'directionScreen';
+  directionScreen.innerHTML = `
+    <div class="dir-header">
+      <button class="dir-back-btn" id="dirBackBtn">← Accueil</button>
+      <h1>🏫 Planning École</h1>
+    </div>
+    <div class="dir-body">
+      <div class="dir-controls">
+        <div>
+          <label>École</label>
+          <select id="dirSchoolSelect"></select>
+        </div>
+        <div>
+          <label>Date de début</label>
+          <input type="date" id="dirDateStart">
+        </div>
+        <div>
+          <label>Date de fin</label>
+          <input type="date" id="dirDateEnd">
+        </div>
+        <button class="dir-btn" id="dirSearchBtn">Afficher</button>
+      </div>
+      <div class="dir-results">
+        <h2 id="dirTitle">Planning école</h2>
+        <div class="dir-meta" id="dirMeta">Choisissez une école et une période.</div>
+        <table class="dir-table">
+          <thead>
+            <tr>
+              <th>Formation / Pondération</th>
+              <th>Date · Créneau</th>
+              <th>Lieu</th>
+              <th>Formateur</th>
+            </tr>
+          </thead>
+          <tbody id="dirBody">
+            <tr><td colspan="4" style="color:#aaa;">Aucune donnée à afficher.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(directionScreen);
+
+  function populateDirSchoolSelect() {
+    const sel = document.getElementById('dirSchoolSelect');
+    if (!sel) return;
+    const schools = (typeof referenceSchools !== 'undefined' ? referenceSchools : []);
+    sel.innerHTML = schools.map(s => `<option value="${s}">${s}</option>`).join('');
+  }
+
+  function renderDirectionPlanning() {
+    const school = document.getElementById('dirSchoolSelect').value;
+    const startDate = document.getElementById('dirDateStart').value;
+    const endDate = document.getElementById('dirDateEnd').value;
+    const title = document.getElementById('dirTitle');
+    const meta = document.getElementById('dirMeta');
+    const body = document.getElementById('dirBody');
+
+    if (!school) { meta.textContent = 'Choisissez une école.'; return; }
+
+    const start = startDate || '2000-01-01';
+    const end = endDate || '2099-12-31';
+
+    const fms = (typeof formations !== 'undefined' ? formations : []);
+    const rows = fms.filter(f => {
+      if (!(f.date >= start && f.date <= end)) return false;
+      const schoolKeys = typeof getSchoolMatchingKeys === 'function' ? getSchoolMatchingKeys(school) : [school.toLowerCase()];
+      const norm = s => (s || '').toLowerCase().replace(/_/g, ' ').trim();
+      const hasDirectSchool = (f.schools || []).some(s => schoolKeys.includes(norm(s)));
+      const hasMissionSchool = (f.missions || []).some(m => schoolKeys.includes(norm(m.school || '')));
+      return hasDirectSchool || hasMissionSchool;
+    }).sort((a,b) => a.date.localeCompare(b.date) || (typeof slotRank === 'function' ? slotRank(a.slot) - slotRank(b.slot) : 0));
+
+    title.textContent = school;
+    meta.textContent = 'Du ' + (typeof humanDate === 'function' ? humanDate(start) : start) + ' au ' + (typeof humanDate === 'function' ? humanDate(end) : end) + ' · ' + rows.length + ' session(s)';
+
+    if (!rows.length) {
+      body.innerHTML = '<tr><td colspan="4" style="color:#aaa;">Aucune formation pour cette école sur cette période.</td></tr>';
+      return;
+    }
+
+    const esc = s => (typeof escapeHtml === 'function' ? escapeHtml(s) : (s||''));
+    const hd = s => (typeof humanDate === 'function' ? humanDate(s) : s);
+    body.innerHTML = rows.map(r =>
+      '<tr>' +
+      '<td>' + esc(r.displayTitle || r.title) + '</td>' +
+      '<td>' + hd(r.date) + ' · ' + esc(r.slot) + '</td>' +
+      '<td>' + esc(r.location || '') + '</td>' +
+      '<td>' + esc(r.trainer || '') + '</td>' +
+      '</tr>'
+    ).join('');
+  }
+
+  window.enterDirectionView = function() {
+    const home = document.getElementById('roleHomeScreen');
+    if (home) home.style.display = 'none';
+    directionScreen.classList.add('active');
+    populateDirSchoolSelect();
+    // Dates par défaut : aujourd'hui + 3 mois
+    const today = new Date();
+    const in3months = new Date(today);
+    in3months.setMonth(today.getMonth() + 3);
+    document.getElementById('dirDateStart').value = today.toISOString().slice(0,10);
+    document.getElementById('dirDateEnd').value = in3months.toISOString().slice(0,10);
+    renderDirectionPlanning();
+  };
+
+  document.getElementById('dirBackBtn').addEventListener('click', function() {
+    directionScreen.classList.remove('active');
+    const home = document.getElementById('roleHomeScreen');
+    if (home) home.style.display = 'flex';
+  });
+
+  document.getElementById('dirSearchBtn').addEventListener('click', renderDirectionPlanning);
+  document.getElementById('dirSchoolSelect').addEventListener('change', renderDirectionPlanning);
 
 })();
 
