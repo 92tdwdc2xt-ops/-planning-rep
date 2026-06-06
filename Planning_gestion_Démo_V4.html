@@ -286,16 +286,13 @@ td:first-child{
     <div class="global-header-left">
       <div style="display:flex;align-items:baseline;gap:16px;flex-wrap:wrap;">
         <h1>Planning REP+</h1>
-        <div id="planningVersionInline" style="font-size:22px;font-weight:800;letter-spacing:.2px;line-height:1;">Aucun planning chargé</div>
       </div>
       <div id="successBox" class="success"></div>
     </div>
     <div class="global-header-actions no-print">
       <button id="undoBtn" class="secondary">Annuler</button>
       <button id="redoBtn" class="light">Rétablir</button>
-      <button id="exportJsonBtn" class="secondary">Enregistrer le planning</button>
-      <button id="importJsonBtn" class="secondary">Charger un planning</button>
-      <input id="importJsonInput" type="file" accept=".json,application/json" style="display:none;">
+
     </div>
   </div>
 
@@ -1807,30 +1804,10 @@ function showSuccess(message){
   window.setTimeout(() => { box.style.display = "none"; box.textContent = ""; }, 2400);
 }
 
-function updatePlanningVersionBox(){
-  const box = document.getElementById("planningVersionInline");
-  if(!box) return;
-  if(currentPlanningVersion > 0){
-    box.textContent = 'Version ' + currentPlanningVersion + (isPlanningDirty ? ' • non enregistrée' : '');
-    box.style.color = isPlanningDirty ? '#9a3412' : '#0f172a';
-  } else {
-    box.textContent = isPlanningDirty ? 'Planning non enregistré' : 'Aucun planning chargé';
-    box.style.color = isPlanningDirty ? '#9a3412' : '#0f172a';
-  }
-}
-function markPlanningDirty(){
-  isPlanningDirty = true;
-  updatePlanningVersionBox();
-}
-function markPlanningSaved(){
-  isPlanningDirty = false;
-  updatePlanningVersionBox();
-}
-window.addEventListener("beforeunload", (event) => {
-  if(!isPlanningDirty) return;
-  event.preventDefault();
-  event.returnValue = "";
-});
+function updatePlanningVersionBox(){ /* Grist auto-save — indicateur supprimé */ }
+function markPlanningDirty(){ /* Grist auto-save */ }
+function markPlanningSaved(){ /* Grist auto-save */ }
+/* beforeunload supprimé — Grist auto-save */
 
 async function saveJsonWithPicker(blob, filename){
   if(window.showSaveFilePicker && window.isSecureContext){
@@ -2134,7 +2111,9 @@ async function exportPlanningJson(){
     referenceAssignments: referenceAssignments,
     referenceBrigadiers: referenceBrigadiers,
     referenceSchools: referenceSchools,
-    ponderationGroups: ponderationGroups
+    ponderationGroups: ponderationGroups,
+    schoolYearConfigs: schoolYearConfigs,
+    activeSchoolYearKey: activeSchoolYearKey
   };
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
   const filename = "planning-rep-plus-v" + nextVersion + ".json";
@@ -2159,12 +2138,19 @@ function importPlanningJsonFromFile(file){
       referenceBrigadiers = Array.isArray(parsed.referenceBrigadiers) ? parsed.referenceBrigadiers : referenceBrigadiers;
       referenceSchools = Array.isArray(parsed.referenceSchools) ? parsed.referenceSchools : referenceSchools;
       ponderationGroups = Array.isArray(parsed.ponderationGroups) ? parsed.ponderationGroups : ponderationGroups;
+      if(parsed.schoolYearConfigs && typeof parsed.schoolYearConfigs === "object"){
+        Object.keys(parsed.schoolYearConfigs).forEach(key => {
+          schoolYearConfigs[key] = parsed.schoolYearConfigs[key];
+        });
+      }
+      if(parsed.activeSchoolYearKey) activeSchoolYearKey = parsed.activeSchoolYearKey;
       formations = importedFormations.map(buildFormation);
       absences = Array.isArray(parsed.absences) ? parsed.absences : [];
   punctualMissions = Array.isArray(parsed.punctualMissions) ? parsed.punctualMissions : [];
       currentPlanningVersion = Number((parsed.meta && parsed.meta.version) || extractVersionFromFilename(file.name) || 0);
       saveReferenceAssignments();
       savePonderationGroups();
+      saveSchoolYearConfigs();
       saveFormations();
       saveAbsences();
       populateBrigadierSelect();
@@ -2175,6 +2161,7 @@ function importPlanningJsonFromFile(file){
       resetEditMode();
       clearAbsenceForm();
       resetAbsenceEditMode();
+      renderSchoolYearSettings();
       renderAllPanels();
       showSuccess(currentPlanningVersion > 0
         ? ("Planning chargé : version " + currentPlanningVersion + ".")
@@ -4610,6 +4597,7 @@ function renderPanelByBodyId(bodyId){
     case "completePanelBody": renderCompletePlanning(); break;
     case "brigadierPanelBody": renderBrigadierPlanning(); break;
     case "schoolPanelBody": renderSchoolPlanning(); break;
+    case "referencesPanelBody": renderSchoolYearSettings(); break;
   }
 }
 
@@ -5621,16 +5609,9 @@ document.getElementById("previewPonderationBlockBtn").addEventListener("click", 
 document.getElementById("clearBlockFormBtn").addEventListener("click", clearPonderationBlockForm);
 document.getElementById("createPonderationBlockBtn").addEventListener("click", createPonderationBlockFromUI);
 
-document.getElementById("exportJsonBtn").addEventListener("click", exportPlanningJson);
-document.getElementById("importJsonBtn").addEventListener("click", () => {
-  if(isPlanningDirty && !window.confirm("Des modifications n'ont pas été enregistrées. Voulez-vous vraiment charger un autre planning ?")) return;
-  document.getElementById("importJsonInput").click();
-});
-document.getElementById("importJsonInput").addEventListener("change", (event) => {
-  const file = event.target.files && event.target.files[0];
-  importPlanningJsonFromFile(file);
-  event.target.value = "";
-});
+/* exportJsonBtn supprimé — Grist auto-save */
+/* bouton importJsonBtn supprimé — Grist auto-save */
+/* importJsonInput supprimé — Grist auto-save */
 
 document.getElementById("schoolsHelp").textContent = referenceSchools.length ? (referenceSchools.length + " école(s) reconnue(s) dans la base importée.") : "Aucun référentiel importé.";
 
@@ -5642,6 +5623,8 @@ document.getElementById("schoolsHelp").textContent = referenceSchools.length ? (
   }
 
   // 2. Charger les données (maintenant depuis Grist)
+  loadSchoolYearConfigs();
+  renderSchoolYearSettings();
   loadReferenceAssignments();
   loadPonderationGroups();
   clearForm();
@@ -6129,6 +6112,7 @@ function readAbsenceForm(){
         '<div class="role-home-actions">' +
           '<button type="button" class="role-choice-btn" id="enterGestionnaireBtn"><span class="icon">🗂️</span><span>Gestionnaire</span></button>' +
           '<button type="button" class="role-choice-btn secondary" id="enterOperatriceBtn"><span class="icon">📋</span><span>Opératrice</span></button>' +
+          '<button type="button" class="role-choice-btn remplacant" id="enterRemplacantBtn"><span class="icon">📱</span><span>Remplaçant·e</span></button>' +
         '</div>' +
       '</div>';
     document.body.insertBefore(home, wrap);
@@ -6147,6 +6131,7 @@ function readAbsenceForm(){
 
     document.getElementById('enterGestionnaireBtn').addEventListener('click', function(){ enterRole('gestionnaire'); });
     document.getElementById('enterOperatriceBtn').addEventListener('click', function(){ enterRole('operatrice'); });
+    document.getElementById('enterRemplacantBtn').addEventListener('click', function(){ enterRemplacantView(); });
   }
 
   function cardTitle(card){
@@ -6374,6 +6359,446 @@ function readAbsenceForm(){
   assignRoles();
   applyRoleVisibility();
   returnToRoleHome();
+
+  // ─── VUE REMPLAÇANT ──────────────────────────────────────────────────────────
+
+  // Injecter le CSS de la vue remplaçant
+  const remplacantStyle = document.createElement('style');
+  remplacantStyle.textContent = `
+    .role-choice-btn.remplacant { background: #1a6b4a; color: #fff; }
+    .role-choice-btn.remplacant:hover { background: #145c3e; }
+
+    #remplacantScreen {
+      display: none;
+      min-height: 100vh;
+      background: #f5f7fa;
+      font-family: system-ui, sans-serif;
+    }
+    #remplacantScreen.active { display: block; }
+
+    .rmp-header {
+      background: #1a6b4a;
+      color: #fff;
+      padding: 16px 20px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+    .rmp-header h1 { font-size: 1.1rem; margin: 0; flex: 1; }
+    .rmp-back-btn {
+      background: rgba(255,255,255,0.2);
+      border: none;
+      color: #fff;
+      border-radius: 8px;
+      padding: 6px 12px;
+      cursor: pointer;
+      font-size: 0.9rem;
+    }
+
+    .rmp-select-screen { padding: 24px 20px; }
+    .rmp-select-screen h2 { font-size: 1rem; color: #333; margin-bottom: 16px; }
+    .rmp-search {
+      width: 100%;
+      padding: 12px 16px;
+      border: 2px solid #ddd;
+      border-radius: 12px;
+      font-size: 1rem;
+      box-sizing: border-box;
+      margin-bottom: 12px;
+    }
+    .rmp-search:focus { border-color: #1a6b4a; outline: none; }
+    .rmp-brigadier-list { display: flex; flex-direction: column; gap: 8px; }
+    .rmp-brigadier-item {
+      background: #fff;
+      border: 1px solid #e5e7eb;
+      border-radius: 12px;
+      padding: 14px 16px;
+      cursor: pointer;
+      font-size: 1rem;
+      color: #333;
+      transition: all 0.15s;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .rmp-brigadier-item:hover, .rmp-brigadier-item:active {
+      background: #f0faf5;
+      border-color: #1a6b4a;
+      color: #1a6b4a;
+    }
+    .rmp-brigadier-item .rmp-avatar {
+      width: 36px; height: 36px;
+      background: #1a6b4a;
+      color: #fff;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: bold; font-size: 0.85rem; flex-shrink: 0;
+    }
+
+    .rmp-planning-screen { padding: 16px; display: none; }
+    .rmp-planning-screen.active { display: block; }
+
+    .rmp-person-header {
+      background: #fff;
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+    }
+    .rmp-person-avatar {
+      width: 48px; height: 48px;
+      background: #1a6b4a;
+      color: #fff;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: bold; font-size: 1rem; flex-shrink: 0;
+    }
+    .rmp-person-name { font-size: 1.1rem; font-weight: 600; color: #1a1a1a; }
+    .rmp-person-school { font-size: 0.85rem; color: #666; margin-top: 2px; }
+
+    .rmp-week { margin-bottom: 20px; }
+    .rmp-week-title {
+      font-size: 0.8rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      color: #888;
+      letter-spacing: 0.05em;
+      margin-bottom: 8px;
+      padding: 0 4px;
+    }
+    .rmp-week-title.current { color: #1a6b4a; }
+
+    .rmp-day {
+      background: #fff;
+      border-radius: 12px;
+      margin-bottom: 8px;
+      overflow: hidden;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.07);
+    }
+    .rmp-day.today { border: 2px solid #1a6b4a; }
+    .rmp-day-header {
+      padding: 10px 16px;
+      font-weight: 600;
+      font-size: 0.9rem;
+      color: #333;
+      border-bottom: 1px solid #f0f0f0;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .rmp-day-header .rmp-today-badge {
+      background: #1a6b4a;
+      color: #fff;
+      font-size: 0.7rem;
+      padding: 2px 8px;
+      border-radius: 20px;
+      font-weight: 500;
+    }
+    .rmp-slot {
+      padding: 10px 16px;
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      border-bottom: 1px solid #f5f5f5;
+    }
+    .rmp-slot:last-child { border-bottom: none; }
+    .rmp-slot-label {
+      font-size: 0.75rem;
+      color: #888;
+      width: 36px;
+      flex-shrink: 0;
+      padding-top: 2px;
+    }
+    .rmp-slot-content { flex: 1; }
+    .rmp-slot-school {
+      font-weight: 600;
+      font-size: 0.95rem;
+      color: #1a1a1a;
+    }
+    .rmp-slot-detail { font-size: 0.82rem; color: #666; margin-top: 2px; }
+    .rmp-slot-empty { color: #bbb; font-style: italic; font-size: 0.85rem; }
+    .rmp-slot-formation {
+      background: #fff3cd;
+      padding: 6px 10px;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      color: #856404;
+      font-weight: 500;
+    }
+    .rmp-slot-absence {
+      color: #dc3545;
+      font-style: italic;
+      font-size: 0.85rem;
+    }
+
+    .rmp-nav-btns {
+      display: flex; gap: 8px; margin-bottom: 16px;
+    }
+    .rmp-nav-btn {
+      flex: 1;
+      padding: 10px;
+      background: #fff;
+      border: 1px solid #ddd;
+      border-radius: 10px;
+      cursor: pointer;
+      font-size: 0.9rem;
+      color: #333;
+    }
+    .rmp-nav-btn:hover { background: #f0faf5; border-color: #1a6b4a; }
+    .rmp-nav-btn.active { background: #1a6b4a; color: #fff; border-color: #1a6b4a; }
+
+    @media (min-width: 600px) {
+      #remplacantScreen { max-width: 480px; margin: 0 auto; }
+    }
+  `;
+  document.head.appendChild(remplacantStyle);
+
+  // Créer l'écran remplaçant
+  const remplacantScreen = document.createElement('div');
+  remplacantScreen.id = 'remplacantScreen';
+  remplacantScreen.innerHTML = `
+    <div class="rmp-header">
+      <button class="rmp-back-btn" id="rmpBackBtn">← Accueil</button>
+      <h1>Mon Planning</h1>
+    </div>
+    <div id="rmpSelectScreen" class="rmp-select-screen">
+      <h2>Qui êtes-vous ?</h2>
+      <input type="text" class="rmp-search" id="rmpSearch" placeholder="Rechercher votre nom...">
+      <div class="rmp-brigadier-list" id="rmpBrigadierList"></div>
+    </div>
+    <div id="rmpPlanningScreen" class="rmp-planning-screen">
+      <div class="rmp-person-header">
+        <div class="rmp-person-avatar" id="rmpPersonAvatar"></div>
+        <div>
+          <div class="rmp-person-name" id="rmpPersonName"></div>
+          <div class="rmp-person-school" id="rmpPersonSchool"></div>
+        </div>
+      </div>
+      <div class="rmp-nav-btns" id="rmpNavBtns"></div>
+      <div id="rmpCalendar"></div>
+    </div>
+  `;
+  document.body.appendChild(remplacantScreen);
+
+  let rmpCurrentBrigadier = null;
+  let rmpWeekOffset = 0; // 0 = semaine courante, 1 = suivante, etc.
+  const RMP_WEEKS_AHEAD = 4;
+
+  function initials(name) {
+    return (name || '').split(/\s+/).filter(Boolean).map(w => w[0]).join('').toUpperCase().slice(0,2);
+  }
+
+  function getWeekDates(weekOffset) {
+    const today = new Date();
+    const day = today.getDay();
+    const monday = new Date(today);
+    monday.setDate(today.getDate() - (day === 0 ? 6 : day - 1) + weekOffset * 7);
+    const dates = [];
+    for (let i = 0; i < 5; i++) {
+      const d = new Date(monday);
+      d.setDate(monday.getDate() + i);
+      dates.push(d);
+    }
+    return dates;
+  }
+
+  function formatDateStr(d) {
+    return d.toISOString().slice(0,10);
+  }
+
+  function formatDayLabel(d) {
+    return d.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
+  }
+
+  function getMissionForSlot(brigadierName, dateStr, slot) {
+    const missions = (typeof punctualMissions !== 'undefined' ? punctualMissions : []);
+    const nSlot = normalizeSlot(slot);
+    const nName = (brigadierName || '').toLowerCase().trim();
+    return missions.find(m => {
+      const mSlot = normalizeSlot(m.slot || '');
+      const mName = (m.brigadier || '').toLowerCase().trim();
+      return m.date === dateStr && mSlot === nSlot && mName === nName;
+    });
+  }
+
+  function getFormationsForSlot(dateStr, slot) {
+    const fms = (typeof formations !== 'undefined' ? formations : []);
+    const nSlot = normalizeSlot(slot);
+    return fms.filter(f => f.date === dateStr && normalizeSlot(f.slot || '') === nSlot);
+  }
+
+  function getFormationForSlot(dateStr, slot) {
+    const fms = (typeof formations !== 'undefined' ? formations : []);
+    return fms.find(f =>
+      f.date === dateStr &&
+      normalizeSlot(f.slot) === normalizeSlot(slot)
+    );
+  }
+
+  function getAbsenceForSlot(brigadierName, dateStr, slot) {
+    const abs = (typeof absences !== 'undefined' ? absences : []);
+    return abs.find(a =>
+      (a.brigadier || '').toLowerCase() === (brigadierName || '').toLowerCase() &&
+      (typeof absenceCovers === 'function' ? absenceCovers(a, dateStr, slot) : false)
+    );
+  }
+
+  function getReferenceSchool(brigadierName) {
+    const refs = (typeof referenceAssignments !== 'undefined' ? referenceAssignments : []);
+    const ref = refs.find(r =>
+      (r.brigadier_name || '').toLowerCase() === (brigadierName || '').toLowerCase()
+    );
+    if (!ref) return '';
+    const parts = [ref.school, ref.level].filter(Boolean);
+    return parts.join(' ');
+  }
+
+  function normalizeSlot(s) {
+    const v = (s || '').toLowerCase().trim();
+    if (v === 'matin' || v === 'am' || v === 'morning' || v === 'mat') return 'matin';
+    if (v === 'apm' || v === 'pm' || v === 'apres-midi' || v === 'après-midi' || v.includes('apr') || v.includes('midi')) return 'apm';
+    return v;
+  }
+
+  function renderSlot(brigadierName, dateStr, slotKey, slotLabel) {
+    const absence = getAbsenceForSlot(brigadierName, dateStr, slotKey);
+    if (absence) {
+      return `<div class="rmp-slot">
+        <div class="rmp-slot-label">${slotLabel}</div>
+        <div class="rmp-slot-content"><div class="rmp-slot-absence">🤒 Absence</div></div>
+      </div>`;
+    }
+    const mission = getMissionForSlot(brigadierName, dateStr, slotKey);
+    if (mission) {
+      const detail = [mission.level, mission.replaced_teacher_name ? `(${mission.replaced_teacher_name})` : ''].filter(Boolean).join(' ');
+      return `<div class="rmp-slot">
+        <div class="rmp-slot-label">${slotLabel}</div>
+        <div class="rmp-slot-content">
+          <div class="rmp-slot-school">🏫 ${mission.school || ''}</div>
+          ${detail ? `<div class="rmp-slot-detail">${detail}</div>` : ''}
+        </div>
+      </div>`;
+    }
+    const formation = getFormationForSlot(dateStr, slotKey);
+    if (formation) {
+      return `<div class="rmp-slot">
+        <div class="rmp-slot-label">${slotLabel}</div>
+        <div class="rmp-slot-content"><div class="rmp-slot-formation">📚 ${formation.title || 'Formation'}${formation.location ? ' — ' + formation.location : ''}</div></div>
+      </div>`;
+    }
+    return `<div class="rmp-slot">
+      <div class="rmp-slot-label">${slotLabel}</div>
+      <div class="rmp-slot-content"><div class="rmp-slot-empty">—</div></div>
+    </div>`;
+  }
+
+  function renderRmpCalendar(brigadierName, weekOffset) {
+    const today = formatDateStr(new Date());
+    const dates = getWeekDates(weekOffset);
+    const cal = document.getElementById('rmpCalendar');
+    if (!cal) return;
+
+    const weekLabel = weekOffset === 0 ? 'Cette semaine' : weekOffset === 1 ? 'Semaine prochaine' : `Dans ${weekOffset} semaines`;
+    let html = `<div class="rmp-week-title ${weekOffset === 0 ? 'current' : ''}">${weekLabel}</div>`;
+
+    dates.forEach(d => {
+      const dateStr = formatDateStr(d);
+      const isToday = dateStr === today;
+      html += `<div class="rmp-day ${isToday ? 'today' : ''}">
+        <div class="rmp-day-header">
+          ${formatDayLabel(d)}
+          ${isToday ? '<span class="rmp-today-badge">Auj.</span>' : ''}
+        </div>
+        ${renderSlot(brigadierName, dateStr, 'Matin', 'Matin')}
+        ${renderSlot(brigadierName, dateStr, 'APM', 'APM')}
+      </div>`;
+    });
+
+    cal.innerHTML = html;
+  }
+
+  function renderRmpNavBtns(weekOffset) {
+    const nav = document.getElementById('rmpNavBtns');
+    if (!nav) return;
+    let html = '';
+    for (let i = 0; i <= RMP_WEEKS_AHEAD; i++) {
+      const label = i === 0 ? 'Cette sem.' : i === 1 ? 'Sem. suiv.' : `+${i} sem.`;
+      html += `<button class="rmp-nav-btn ${i === weekOffset ? 'active' : ''}" onclick="rmpShowWeek(${i})">${label}</button>`;
+    }
+    nav.innerHTML = html;
+  }
+
+  window.rmpShowWeek = function(offset) {
+    rmpWeekOffset = offset;
+    renderRmpNavBtns(offset);
+    renderRmpCalendar(rmpCurrentBrigadier, offset);
+  };
+
+  function showRmpPlanning(brigadierName) {
+    rmpCurrentBrigadier = brigadierName;
+    rmpWeekOffset = 0;
+    // Debug temporaire
+    const missions = (typeof punctualMissions !== 'undefined' ? punctualMissions : []);
+    const myMissions = missions.filter(m => (m.brigadier||'').toLowerCase() === brigadierName.toLowerCase());
+    console.log('[Remplaçant] Missions pour', brigadierName, ':', myMissions.length, myMissions.slice(0,3));
+    document.getElementById('rmpSelectScreen').style.display = 'none';
+    document.getElementById('rmpPlanningScreen').classList.add('active');
+    document.getElementById('rmpPersonName').textContent = brigadierName;
+    document.getElementById('rmpPersonAvatar').textContent = initials(brigadierName);
+    document.getElementById('rmpPersonSchool').textContent = 'Remplaçant·e REP+';
+    renderRmpNavBtns(0);
+    renderRmpCalendar(brigadierName, 0);
+  }
+
+  function renderBrigadierList(filter) {
+    const list = document.getElementById('rmpBrigadierList');
+    if (!list) return;
+    const brigades = (typeof referenceBrigadiers !== 'undefined' ? referenceBrigadiers : []);
+    const filtered = brigades.filter(b =>
+      !filter || (b.brigadier_name || '').toLowerCase().includes(filter.toLowerCase())
+    ).sort((a,b) => (a.brigadier_name||'').localeCompare(b.brigadier_name||''));
+
+    if (filtered.length === 0) {
+      list.innerHTML = '<div style="color:#888;padding:12px;">Aucun remplaçant trouvé</div>';
+      return;
+    }
+
+    list.innerHTML = filtered.map(b => `
+      <div class="rmp-brigadier-item" onclick="showRmpPlanning('${(b.brigadier_name||'').replace(/'/g,"\'")}')">
+        <div class="rmp-avatar">${initials(b.brigadier_name)}</div>
+        <div>${b.brigadier_name || ''}</div>
+      </div>
+    `).join('');
+  }
+
+  window.enterRemplacantView = function() {
+    const home = document.getElementById('roleHomeScreen');
+    if (home) home.style.display = 'none';
+    remplacantScreen.classList.add('active');
+    document.getElementById('rmpSelectScreen').style.display = 'block';
+    document.getElementById('rmpPlanningScreen').classList.remove('active');
+    renderBrigadierList('');
+  };
+
+  document.getElementById('rmpBackBtn').addEventListener('click', function() {
+    remplacantScreen.classList.remove('active');
+    const home = document.getElementById('roleHomeScreen');
+    if (home) home.style.display = 'flex';
+    rmpCurrentBrigadier = null;
+  });
+
+  document.getElementById('rmpSearch').addEventListener('input', function() {
+    renderBrigadierList(this.value);
+  });
+
+  window.showRmpPlanning = showRmpPlanning;
+
 })();
 
 </script>
