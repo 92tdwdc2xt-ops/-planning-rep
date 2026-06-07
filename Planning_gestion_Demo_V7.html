@@ -4023,6 +4023,10 @@ th:first-child{
 </head>
 <body>
 ${pages.map(p => '<div class="week-page">' + p + '</div>').join("")}
+  <!-- Indicateur de sauvegarde -->
+  <div id="saveIndicator"></div>
+  <!-- Bandeau hors-ligne -->
+  <div id="offlineBanner">⚠️ Mode hors-ligne — données non synchronisées avec Grist</div>
 </body>
 </html>`;
 
@@ -6390,6 +6394,66 @@ function readAbsenceForm(){
   // Injecter le CSS de la vue remplaçant
   const remplacantStyle = document.createElement('style');
   remplacantStyle.textContent = `
+    /* Indicateur de sauvegarde */
+    #saveIndicator {
+      position: fixed;
+      bottom: 16px;
+      right: 16px;
+      padding: 8px 16px;
+      border-radius: 20px;
+      font-size: 0.82rem;
+      font-weight: 500;
+      z-index: 9999;
+      display: none;
+      align-items: center;
+      gap: 6px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+      transition: opacity 0.3s;
+    }
+    #saveIndicator.saving {
+      display: flex;
+      background: #fff3cd;
+      color: #856404;
+    }
+    #saveIndicator.saved {
+      display: flex;
+      background: #d1e7dd;
+      color: #0a3622;
+    }
+    #saveIndicator.error {
+      display: flex;
+      background: #f8d7da;
+      color: #842029;
+    }
+    /* Bandeau hors-ligne */
+    #offlineBanner {
+      display: none;
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      background: #dc3545;
+      color: #fff;
+      text-align: center;
+      padding: 6px;
+      font-size: 0.85rem;
+      font-weight: 500;
+      z-index: 99999;
+    }
+    #offlineBanner.visible { display: block; }
+
+    /* Disponibles épinglés */
+    #pinnedAvailable {
+      display: none;
+      background: #d1e7dd;
+      border: 1px solid #a3cfbb;
+      border-radius: 10px;
+      padding: 10px 16px;
+      margin-bottom: 12px;
+      font-size: 0.88rem;
+    }
+    #pinnedAvailable.visible { display: block; }
+    #pinnedAvailable strong { color: #0a3622; }
+    #pinnedAvailable .avail-names { color: #145c3e; margin-top: 4px; }
+
     .role-choice-btn.remplacant { background: #1a6b4a; color: #fff; }
     .role-choice-btn.remplacant:hover { background: #145c3e; }
     .role-choice-btn.direction { background: #1a4a6b; color: #fff; }
@@ -6892,6 +6956,123 @@ function readAbsenceForm(){
   });
 
   window.showRmpPlanning = showRmpPlanning;
+
+  // ─── INDICATEUR DE SAUVEGARDE ────────────────────────────────────────────────
+  let _saveTimer = null;
+  window.showSaveIndicator = function(state, msg) {
+    const el = document.getElementById('saveIndicator');
+    if (!el) return;
+    el.className = state;
+    el.innerHTML = {
+      saving: '⏳ ' + (msg || 'Enregistrement...'),
+      saved:  '✓ ' + (msg || 'Sauvegardé'),
+      error:  '✗ ' + (msg || 'Erreur de sauvegarde')
+    }[state] || msg;
+    clearTimeout(_saveTimer);
+    if (state === 'saved' || state === 'error') {
+      _saveTimer = setTimeout(() => { el.style.opacity = '0'; setTimeout(() => { el.className = ''; el.style.opacity = '1'; }, 300); }, 3000);
+    }
+  };
+
+  // Intercepter gristSetItem pour afficher l'indicateur
+  const _origGristSetItem = window.gristSetItem;
+  if (typeof _origGristSetItem === 'function') {
+    window.gristSetItem = async function(cle, valeur) {
+      showSaveIndicator('saving');
+      try {
+        await _origGristSetItem(cle, valeur);
+        showSaveIndicator('saved');
+      } catch(err) {
+        showSaveIndicator('error', 'Erreur de sauvegarde');
+      }
+    };
+  }
+
+  // ─── MODE HORS-LIGNE ─────────────────────────────────────────────────────────
+  function updateOnlineBanner() {
+    const banner = document.getElementById('offlineBanner');
+    if (!banner) return;
+    if (navigator.onLine) {
+      banner.classList.remove('visible');
+    } else {
+      banner.classList.add('visible');
+    }
+  }
+  window.addEventListener('online',  updateOnlineBanner);
+  window.addEventListener('offline', updateOnlineBanner);
+  updateOnlineBanner();
+
+  // ─── DISPONIBLES ÉPINGLÉS (vue opératrice) ───────────────────────────────────
+  function updatePinnedAvailable() {
+    const pin = document.getElementById('pinnedAvailable');
+    if (!pin) return;
+    // Seulement visible en mode opératrice
+    if (window.currentRoleMode !== 'operatrice') { pin.classList.remove('visible'); return; }
+    const dateStr = typeof getReplacementDayDate === 'function' ? getReplacementDayDate() : '';
+    const slot = typeof getReplacementDaySlot === 'function' ? getReplacementDaySlot() : 'Matin';
+    if (!dateStr) { pin.classList.remove('visible'); return; }
+    const available = typeof getAvailableBrigadiersForReplacementDay === 'function'
+      ? getAvailableBrigadiersForReplacementDay(dateStr, slot)
+      : [];
+    pin.classList.add('visible');
+    if (available.length) {
+      pin.innerHTML = '<strong>✅ ' + available.length + ' ZIL disponible(s) — ' + slot + ' ' + dateStr + '</strong>' +
+        '<div class="avail-names">' + available.map(a => a.brigadier_name).join(' · ') + '</div>';
+    } else {
+      pin.innerHTML = '<strong style="color:#842029;">❌ Aucun ZIL disponible — ' + slot + ' ' + dateStr + '</strong>';
+    }
+  }
+
+  // Injecter le bandeau disponibles dans la vue opératrice
+  const _origEnterRole = window.enterRole;
+  window.enterRole = function(role) {
+    if (typeof _origEnterRole === 'function') _origEnterRole(role);
+    if (role === 'operatrice') {
+      // Créer le bandeau si pas encore là
+      if (!document.getElementById('pinnedAvailable')) {
+        const pin = document.createElement('div');
+        pin.id = 'pinnedAvailable';
+        const main = document.querySelector('main') || document.querySelector('.main-content') || document.body;
+        main.insertBefore(pin, main.firstChild);
+      }
+      updatePinnedAvailable();
+    }
+  };
+
+  // Mettre à jour le bandeau quand date/créneau change
+  ['replacementDayDate', 'replacementDaySlot'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('change', updatePinnedAvailable);
+  });
+
+  // Mettre à jour après chaque render
+  const _prevRenderAll = window.renderAllPanels;
+  window.renderAllPanels = function() {
+    if (typeof _prevRenderAll === 'function') _prevRenderAll();
+    updatePinnedAvailable();
+  };
+
+  // ─── CONFIRMATIONS AVANT SUPPRESSION ─────────────────────────────────────────
+  // Intercepter les boutons de suppression existants
+  document.addEventListener('click', function(e) {
+    const btn = e.target.closest('button');
+    if (!btn) return;
+    const txt = (btn.textContent || '').trim().toLowerCase();
+    const id = btn.id || '';
+    // Boutons de suppression connus
+    if (
+      txt === 'supprimer' ||
+      id.includes('delete') ||
+      id.includes('remove') ||
+      btn.classList.contains('delete-btn') ||
+      btn.classList.contains('btn-danger')
+    ) {
+      if (!confirm('Êtes-vous sûr de vouloir supprimer cet élément ? Cette action est irréversible.')) {
+        e.stopImmediatePropagation();
+        e.preventDefault();
+      }
+    }
+  }, true); // capture phase pour intercepter avant les handlers existants
 
   // ─── VUE DIRECTION D'ÉCOLE ───────────────────────────────────────────────────
 
