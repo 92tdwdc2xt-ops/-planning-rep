@@ -6280,9 +6280,13 @@ function readAbsenceForm(){
 
       (overlay.replacementMissions || []).forEach(m => {
         if((m.brigadier || '') !== zil) return;
+        // Ne pas afficher si le brigadier est absent sur ce créneau
+        const rSlot = normalizeSlotForAbsence(m.slot || s.slot || '');
+        const isAbsentR = getAbsenceByBrigadierForSlot(zil, s.date, rSlot);
+        if(isAbsentR) return;
         addRow({
           date: s.date,
-          slot: normalizeSlotForAbsence(m.slot || s.slot || ''),
+          slot: rSlot,
           school: m.school || '',
           level: m.level || '',
           teacher: lookupReplacedTeacherName(m) || m.replaced_teacher_name || '',
@@ -6293,9 +6297,13 @@ function readAbsenceForm(){
 
       (s.missions || []).forEach(m => {
         if((m.brigadier || '') !== zil) return;
+        // Ne pas afficher si le brigadier est absent sur ce créneau
+        const mSlot = normalizeSlotForAbsence(m.slot || s.slot || '');
+        const isAbsent = getAbsenceByBrigadierForSlot(zil, s.date, mSlot);
+        if(isAbsent) return;
         addRow({
           date: s.date,
-          slot: normalizeSlotForAbsence(m.slot || s.slot || ''),
+          slot: mSlot,
           school: m.school || '',
           level: m.level || '',
           teacher: lookupReplacedTeacherName(m) || m.replaced_teacher_name || '',
