@@ -50,12 +50,7 @@ function gristGetItem(cle) {
 
 async function gristSetItem(cle, valeur) {
   _gristCache[cle] = valeur;
-
-  if (!_gristReady) {
-    localStorage.setItem(cle, valeur);
-    return;
-  }
-
+  if (!_gristReady) { localStorage.setItem(cle, valeur); return; }
   try {
     if (_gristRowIds[cle]) {
       await fetch(`${PROXY_URL}/${GRIST_TABLE}/records`, {
@@ -69,9 +64,7 @@ async function gristSetItem(cle, valeur) {
       const resp = await fetch(`${PROXY_URL}/${GRIST_TABLE}/records`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          records: [{ fields: { cle, valeur } }]
-        })
+        body: JSON.stringify({ records: [{ fields: { cle, valeur } }] })
       });
       if (resp.ok) {
         const data = await resp.json();
@@ -88,12 +81,7 @@ async function gristSetItem(cle, valeur) {
 
 async function gristRemoveItem(cle) {
   delete _gristCache[cle];
-
-  if (!_gristReady || !_gristRowIds[cle]) {
-    localStorage.removeItem(cle);
-    return;
-  }
-
+  if (!_gristReady || !_gristRowIds[cle]) { localStorage.removeItem(cle); return; }
   try {
     await fetch(`${PROXY_URL}/${GRIST_TABLE}/records`, {
       method: "DELETE",
@@ -113,20 +101,9 @@ function gristInstallStorageOverride() {
     setItem:    localStorage.setItem.bind(localStorage),
     removeItem: localStorage.removeItem.bind(localStorage)
   };
-
-  Storage.prototype.getItem = function(cle) {
-    if (!_gristReady) return _orig.getItem(cle);
-    return gristGetItem(cle);
-  };
-
-  Storage.prototype.setItem = function(cle, valeur) {
-    gristSetItem(cle, String(valeur));
-  };
-
-  Storage.prototype.removeItem = function(cle) {
-    gristRemoveItem(cle);
-  };
-
+  Storage.prototype.getItem    = function(cle) { if (!_gristReady) return _orig.getItem(cle); return gristGetItem(cle); };
+  Storage.prototype.setItem    = function(cle, valeur) { gristSetItem(cle, String(valeur)); };
+  Storage.prototype.removeItem = function(cle) { gristRemoveItem(cle); };
   console.log("[GristAdapter] Override localStorage installé");
 }
 
@@ -136,25 +113,23 @@ async function gristStorageInit() {
   console.log("[GristAdapter] Prêt ✓");
 }
 
-async function gristMigrateFromLocalStorage() {
-  const keys = [
-    "brigade-rep-toulouse-brigadier-v66-corrige",
-    "brigade-rep-toulouse-absences-v1",
-    "brigade-rep-toulouse-punctual-missions-v1",
-    "brigade-rep-toulouse-reference-assignments-v1",
-    "brigade-rep-toulouse-reference-ponderations-v1",
-    "brigade-rep-toulouse-school-year-configs-v1",
-    "brigade-rep-toulouse-active-school-year-v1"
-  ];
-  let migrated = 0;
-  for (const cle of keys) {
-    const valeur = localStorage.getItem(cle);
-    if (valeur !== null) {
-      await gristSetItem(cle, valeur);
-      migrated++;
-      console.log("[GristAdapter] Migré :", cle);
+// Migration des anciennes clés vers les nouvelles
+async function gristMigrateKeys() {
+  const mapping = {
+    "brigade-rep-toulouse-brigadier-v66-corrige": "planning-formations",
+    "brigade-rep-toulouse-absences-v1":           "planning-absences",
+    "brigade-rep-toulouse-punctual-missions-v1":  "planning-missions",
+    "brigade-rep-toulouse-reference-assignments-v1": "planning-brigadiers",
+    "brigade-rep-toulouse-reference-ponderations-v1": "planning-ponderations",
+    "brigade-rep-toulouse-school-year-configs-v1": "planning-annee-scolaire",
+    "brigade-rep-toulouse-active-school-year-v1":  "planning-annee-active"
+  };
+  for (const [oldKey, newKey] of Object.entries(mapping)) {
+    if (_gristCache[oldKey] && !_gristCache[newKey]) {
+      await gristSetItem(newKey, _gristCache[oldKey]);
+      await gristRemoveItem(oldKey);
+      console.log("[GristAdapter] Migré :", oldKey, "→", newKey);
     }
   }
-  console.log("[GristAdapter] Migration terminée —", migrated, "clés migrées");
-  return migrated;
+  console.log("[GristAdapter] Migration des clés terminée");
 }

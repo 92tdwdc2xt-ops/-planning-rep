@@ -957,19 +957,19 @@ td:first-child{
 <script src="https://docs.getgrist.com/grist-plugin-api.js"></script>
 <script src="grist-storage-adapter-configured.js"></script>
 <script>
-const STORAGE_KEY = "brigade-rep-toulouse-brigadier-v66-corrige";
-const ABSENCES_STORAGE_KEY = "brigade-rep-toulouse-absences-v1";
-const PUNCTUAL_MISSIONS_STORAGE_KEY = "brigade-rep-toulouse-punctual-missions-v1";
-const REF_ASSIGNMENTS_KEY = "brigade-rep-toulouse-reference-assignments-v1";
-const REF_PONDERATION_KEY = "brigade-rep-toulouse-reference-ponderations-v1";
+const STORAGE_KEY = "planning-formations";
+const ABSENCES_STORAGE_KEY = "planning-absences";
+const PUNCTUAL_MISSIONS_STORAGE_KEY = "planning-missions";
+const REF_ASSIGNMENTS_KEY = "planning-brigadiers";
+const REF_PONDERATION_KEY = "planning-ponderations";
 let referenceAssignments = [];
 let referenceSchools = [];
 let referenceBrigadiers = [];
 let ponderationGroups = [];
 
 
-const SCHOOL_YEAR_CONFIGS_KEY = "brigade-rep-toulouse-school-year-configs-v1";
-const ACTIVE_SCHOOL_YEAR_KEY = "brigade-rep-toulouse-active-school-year-v1";
+const SCHOOL_YEAR_CONFIGS_KEY = "planning-annee-scolaire";
+const ACTIVE_SCHOOL_YEAR_KEY = "planning-annee-active";
 const DEFAULT_SCHOOL_YEAR_CONFIGS = {
   "2025-2026": {
     label: "2025-2026",
