@@ -4027,6 +4027,7 @@ ${pages.map(p => '<div class="week-page">' + p + '</div>').join("")}
   <div id="saveIndicator"></div>
   <!-- Bandeau hors-ligne -->
   <div id="offlineBanner">⚠️ Mode hors-ligne — données non synchronisées avec Grist</div>
+  <!-- Disponibles (injecté dynamiquement) -->
 </body>
 </html>`;
 
@@ -6172,6 +6173,33 @@ function readAbsenceForm(){
   }
 
   function createMonthlyZilCard(){
+    // Créer le pavé Disponibles si pas encore là
+    if (!document.getElementById('availableCard')) {
+      const availCard = document.createElement('div');
+      availCard.className = 'card';
+      availCard.id = 'availableCard';
+      availCard.innerHTML =
+        '<div class="panel-header">' +
+          '<h2 style="margin:0;">ZIL disponibles</h2>' +
+          '<button id="toggleAvailablePanel" class="light no-print">Afficher</button>' +
+        '</div>' +
+        '<div id="availablePanelBody" class="hidden">' +
+          '<div class="row2 no-print" style="margin-bottom:12px;">' +
+            '<div><label for="availDate">Date</label>' +
+            '<input type="date" id="availDate" style="width:100%;"></div>' +
+          '</div>' +
+          '<div id="availSlots" style="display:flex;gap:12px;flex-wrap:wrap;"></div>' +
+        '</div>';
+      // Insérer avant le card monthlyZil ou à la fin de la colonne droite
+      const rightCol = document.querySelector('.col-right') || document.querySelector('.right-col');
+      if (rightCol) rightCol.appendChild(availCard);
+    }
+    document.getElementById('toggleAvailablePanel').addEventListener('click', function(){
+      togglePanel('toggleAvailablePanel', 'availablePanelBody');
+      if (isPanelVisible('availablePanelBody')) renderAvailablePanel();
+    });
+    document.getElementById('availDate').addEventListener('change', renderAvailablePanel);
+
     if(document.getElementById('monthlyZilCard')) return;
     const rightCol = document.querySelector('.right-col');
     if(!rightCol) return;
@@ -6440,74 +6468,6 @@ function readAbsenceForm(){
     }
     #offlineBanner.visible { display: block; }
 
-    /* Disponibles épinglés */
-    #pinnedAvailable {
-      display: none;
-      background: #f8f9fa;
-      border: 1px solid #dee2e6;
-      border-radius: 10px;
-      padding: 12px 16px;
-      margin: 12px 16px;
-      font-size: 0.88rem;
-      box-shadow: 0 1px 4px rgba(0,0,0,0.07);
-    }
-    #pinnedAvailable.visible { display: block; }
-    #pinnedAvailable .pin-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 8px;
-    }
-    #pinnedAvailable .pin-title {
-      font-weight: 600;
-      color: #333;
-      font-size: 0.9rem;
-    }
-    #pinnedAvailable .pin-close {
-      background: none;
-      border: none;
-      cursor: pointer;
-      color: #888;
-      font-size: 1rem;
-      padding: 0 4px;
-    }
-    #pinnedAvailable .pin-close:hover { color: #333; }
-    #pinnedAvailable .pin-date-row {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      margin-bottom: 10px;
-    }
-    #pinnedAvailable .pin-date-row input {
-      padding: 5px 10px;
-      border: 1px solid #ddd;
-      border-radius: 6px;
-      font-size: 0.85rem;
-    }
-    #pinnedAvailable .pin-slots {
-      display: flex;
-      gap: 12px;
-      flex-wrap: wrap;
-    }
-    #pinnedAvailable .pin-slot {
-      flex: 1;
-      min-width: 200px;
-      background: #fff;
-      border-radius: 8px;
-      padding: 10px 12px;
-      border: 1px solid #e5e7eb;
-    }
-    #pinnedAvailable .pin-slot-title {
-      font-weight: 600;
-      font-size: 0.82rem;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-      margin-bottom: 6px;
-    }
-    #pinnedAvailable .pin-slot-title.ok { color: #0a3622; }
-    #pinnedAvailable .pin-slot-title.none { color: #842029; }
-    #pinnedAvailable .pin-names { color: #1a6b4a; font-size: 0.85rem; line-height: 1.6; }
-    #pinnedAvailable .pin-none { color: #842029; font-size: 0.85rem; font-style: italic; }
 
     .role-choice-btn.remplacant { background: #1a6b4a; color: #fff; }
     .role-choice-btn.remplacant:hover { background: #145c3e; }
@@ -7057,78 +7017,44 @@ function readAbsenceForm(){
   window.addEventListener('offline', updateOnlineBanner);
   updateOnlineBanner();
 
-  // ─── DISPONIBLES ÉPINGLÉS (vue opératrice) ───────────────────────────────────
-  let _pinHidden = false;
-
-  function renderPinSlot(dateStr, slot) {
-    const available = typeof getAvailableBrigadiersForReplacementDay === 'function'
-      ? getAvailableBrigadiersForReplacementDay(dateStr, slot) : [];
-    const hasAvail = available.length > 0;
-    return '<div class="pin-slot">' +
-      '<div class="pin-slot-title ' + (hasAvail ? 'ok' : 'none') + '">' + slot + ' — ' + (hasAvail ? available.length + ' disponible(s)' : 'Aucun') + '</div>' +
-      (hasAvail
-        ? '<div class="pin-names">' + available.map(a => a.brigadier_name).join('<br>') + '</div>'
-        : '<div class="pin-none">Aucun ZIL disponible</div>'
-      ) +
-    '</div>';
-  }
-
-  function updatePinnedAvailable() {
-    const pin = document.getElementById('pinnedAvailable');
-    if (!pin) return;
-    if (window.currentRoleMode !== 'operatrice' || _pinHidden) { pin.classList.remove('visible'); return; }
-    const dateInput = document.getElementById('pinDate');
-    const dateStr = dateInput ? dateInput.value : (typeof getReplacementDayDate === 'function' ? getReplacementDayDate() : '');
-    if (!dateStr) { pin.classList.remove('visible'); return; }
-    pin.classList.add('visible');
-    const slotsHtml = renderPinSlot(dateStr, 'Matin') + renderPinSlot(dateStr, 'APM');
-    const dateLabel = typeof humanDate === 'function' ? humanDate(dateStr) : dateStr;
-    pin.innerHTML =
-      '<div class="pin-header">' +
-        '<span class="pin-title">👥 Disponibles — ' + dateLabel + '</span>' +
-        '<button class="pin-close" id="pinCloseBtn" title="Fermer">✕</button>' +
-      '</div>' +
-      '<div class="pin-date-row">' +
-        '<label style="font-size:0.82rem;color:#666;">Changer de date :</label>' +
-        '<input type="date" id="pinDate" value="' + dateStr + '">' +
-      '</div>' +
-      '<div class="pin-slots">' + slotsHtml + '</div>';
-
-    document.getElementById('pinCloseBtn').addEventListener('click', function() {
-      _pinHidden = true;
-      pin.classList.remove('visible');
-    });
-    document.getElementById('pinDate').addEventListener('change', function() {
-      updatePinnedAvailable();
-    });
-  }
-
-  // Injecter le bandeau dans la vue opératrice
-  const _origEnterRole = window.enterRole;
-  window.enterRole = function(role) {
-    if (typeof _origEnterRole === 'function') _origEnterRole(role);
-    if (role === 'operatrice') {
-      _pinHidden = false;
-      if (!document.getElementById('pinnedAvailable')) {
-        const pin = document.createElement('div');
-        pin.id = 'pinnedAvailable';
-        const ref = document.querySelector('.panels-grid') || document.querySelector('.main-panels') || document.querySelector('main');
-        if (ref) ref.parentNode.insertBefore(pin, ref);
-        else document.body.insertBefore(pin, document.body.firstChild);
-      }
-      // Date par défaut = aujourd'hui
-      const today = new Date().toISOString().slice(0,10);
-      const dateInput = document.getElementById('pinDate');
-      if (dateInput && !dateInput.value) dateInput.value = today;
-      updatePinnedAvailable();
+  // ─── PAVÉ ZIL DISPONIBLES ────────────────────────────────────────────────────
+  window.renderAvailablePanel = function() {
+    const slots = document.getElementById('availSlots');
+    const dateInput = document.getElementById('availDate');
+    if (!slots || !dateInput) return;
+    const dateStr = dateInput.value;
+    if (!dateStr) {
+      slots.innerHTML = '<div class="small muted">Choisissez une date.</div>';
+      return;
     }
+    const dateLabel = typeof humanDate === 'function' ? humanDate(dateStr) : dateStr;
+    ['Matin', 'APM'].forEach(slot => {
+      const available = typeof getAvailableBrigadiersForReplacementDay === 'function'
+        ? getAvailableBrigadiersForReplacementDay(dateStr, slot) : [];
+      const hasAvail = available.length > 0;
+      const div = document.createElement('div');
+      div.style.cssText = 'flex:1;min-width:200px;background:#fff;border-radius:8px;padding:12px;border:1px solid #e5e7eb;';
+      div.innerHTML =
+        '<div style="font-weight:600;font-size:0.85rem;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px;color:' + (hasAvail ? '#0a3622' : '#842029') + '">' +
+          slot + ' — ' + (hasAvail ? available.length + ' disponible(s)' : 'Aucun') +
+        '</div>' +
+        (hasAvail
+          ? '<div style="color:#1a6b4a;font-size:0.88rem;line-height:1.8;">' + available.map(a => a.brigadier_name).join('<br>') + '</div>'
+          : '<div style="color:#842029;font-style:italic;font-size:0.85rem;">Aucun ZIL disponible</div>'
+        );
+      slots.appendChild(div);
+    });
   };
 
   // Mettre à jour après chaque render
   const _prevRenderAll = window.renderAllPanels;
   window.renderAllPanels = function() {
     if (typeof _prevRenderAll === 'function') _prevRenderAll();
-    updatePinnedAvailable();
+    if (isPanelVisible('availablePanelBody')) {
+      const slots = document.getElementById('availSlots');
+      if (slots) slots.innerHTML = '';
+      renderAvailablePanel();
+    }
   };
 
   // ─── CONFIRMATIONS AVANT SUPPRESSION ─────────────────────────────────────────
