@@ -4023,11 +4023,6 @@ th:first-child{
 </head>
 <body>
 ${pages.map(p => '<div class="week-page">' + p + '</div>').join("")}
-  <!-- Indicateur de sauvegarde -->
-  <div id="saveIndicator"></div>
-  <!-- Bandeau hors-ligne -->
-  <div id="offlineBanner">⚠️ Mode hors-ligne — données non synchronisées avec Grist</div>
-  <!-- Disponibles (injecté dynamiquement) -->
 </body>
 </html>`;
 
@@ -5621,9 +5616,6 @@ document.getElementById("createPonderationBlockBtn").addEventListener("click", c
 document.getElementById("schoolsHelp").textContent = referenceSchools.length ? (referenceSchools.length + " école(s) reconnue(s) dans la base importée.") : "Aucun référentiel importé.";
 
 // ── Démarrage avec Grist ──────────────────────────────────────
-// Masquer le contenu pendant le chargement
-document.body.style.visibility = 'hidden';
-
 document.body.style.visibility = 'hidden';
 
 (async function startApp() {
@@ -5633,6 +5625,10 @@ document.body.style.visibility = 'hidden';
   }
 
   // 2. Charger les données (maintenant depuis Grist)
+  // Debug — vérifier ce qui est dans le cache
+  console.log("[Debug] Clés dans le cache Grist :", Object.keys(_gristCache || {}));
+  console.log("[Debug] REF_ASSIGNMENTS_KEY :", localStorage.getItem("planning-brigadiers") ? "OK (" + localStorage.getItem("planning-brigadiers").length + " chars)" : "VIDE");
+  console.log("[Debug] STORAGE_KEY :", localStorage.getItem("planning-formations") ? "OK (" + localStorage.getItem("planning-formations").length + " chars)" : "VIDE");
   loadSchoolYearConfigs();
   renderSchoolYearSettings();
   loadReferenceAssignments();
@@ -5660,7 +5656,6 @@ document.body.style.visibility = 'hidden';
   updateHistoryInfo();
   hideRemovedAbsenceModules();
   renderAllPanels();
-  // Afficher le contenu une fois chargé
   document.body.style.visibility = 'visible';
 })();
 // ─────────────────────────────────────────────────────────────
@@ -6161,46 +6156,12 @@ function readAbsenceForm(){
     return h2 ? h2.textContent.trim() : '';
   }
 
-  function createAvailableCard(){
-    if(document.getElementById('availableCard')) return;
-    const rightCol = document.querySelector('.right-col');
-    if(!rightCol) return;
-    const card = document.createElement('div');
-    card.className = 'card';
-    card.id = 'availableCard';
-    card.setAttribute('data-role-scope','operatrice');
-    card.innerHTML =
-      '<div class="panel-header">' +
-        '<h2 style="margin:0;">ZIL disponibles</h2>' +
-        '<button id="toggleAvailablePanel" class="light no-print">Afficher</button>' +
-      '</div>' +
-      '<div id="availablePanelBody" class="hidden">' +
-        '<div class="row2 no-print" style="margin-bottom:12px;">' +
-          '<div><label for="availDate">Date</label>' +
-          '<input type="date" id="availDate" style="width:100%;"></div>' +
-        '</div>' +
-        '<div id="availSlots" style="display:flex;gap:12px;flex-wrap:wrap;"></div>' +
-      '</div>';
-    rightCol.appendChild(card);
-    document.getElementById('toggleAvailablePanel').addEventListener('click', function(){
-      togglePanel('toggleAvailablePanel', 'availablePanelBody');
-      if(isPanelVisible('availablePanelBody')) {
-        document.getElementById('availDate').value = new Date().toISOString().slice(0,10);
-        renderAvailablePanel();
-      }
-    });
-    document.getElementById('availDate').addEventListener('change', function(){
-      document.getElementById('availSlots').innerHTML = '';
-      renderAvailablePanel();
-    });
-  }
-
   function assignRoles(){
     document.querySelectorAll('.left-col > .card, .right-col > .card').forEach(card => {
       const title = cardTitle(card);
       let role = 'shared';
       if(title === 'Créer / modifier une formation' || title === 'Pondérations' || title === 'Référentiels annuels' || title === 'Planning brigadier' || title === 'Planning école') role = 'gestionnaire';
-      if(title === 'Absences' || title === 'Remplacements du jour' || title === 'Conflits à traiter' || title === 'Extraction mensuelle par ZIL' || title === 'ZIL disponibles') role = 'operatrice';
+      if(title === 'Absences' || title === 'Remplacements du jour' || title === 'Conflits à traiter' || title === 'Extraction mensuelle par ZIL') role = 'operatrice';
       if(title === 'Planning complet') role = 'shared';
       card.setAttribute('data-role-scope', role);
     });
@@ -6319,13 +6280,9 @@ function readAbsenceForm(){
 
       (overlay.replacementMissions || []).forEach(m => {
         if((m.brigadier || '') !== zil) return;
-        // Ne pas afficher si le brigadier est absent sur ce créneau
-        const rSlot = normalizeSlotForAbsence(m.slot || s.slot || '');
-        const isAbsentR = getAbsenceByBrigadierForSlot(zil, s.date, rSlot);
-        if(isAbsentR) return;
         addRow({
           date: s.date,
-          slot: rSlot,
+          slot: normalizeSlotForAbsence(m.slot || s.slot || ''),
           school: m.school || '',
           level: m.level || '',
           teacher: lookupReplacedTeacherName(m) || m.replaced_teacher_name || '',
@@ -6336,13 +6293,9 @@ function readAbsenceForm(){
 
       (s.missions || []).forEach(m => {
         if((m.brigadier || '') !== zil) return;
-        // Ne pas afficher si le brigadier est absent sur ce créneau
-        const mSlot = normalizeSlotForAbsence(m.slot || s.slot || '');
-        const isAbsent = getAbsenceByBrigadierForSlot(zil, s.date, mSlot);
-        if(isAbsent) return;
         addRow({
           date: s.date,
-          slot: mSlot,
+          slot: normalizeSlotForAbsence(m.slot || s.slot || ''),
           school: m.school || '',
           level: m.level || '',
           teacher: lookupReplacedTeacherName(m) || m.replaced_teacher_name || '',
@@ -6420,7 +6373,6 @@ function readAbsenceForm(){
 
   createRoleHome();
   createMonthlyZilCard();
-  createAvailableCard();
   assignRoles();
   applyRoleVisibility();
   returnToRoleHome();
@@ -6430,53 +6382,6 @@ function readAbsenceForm(){
   // Injecter le CSS de la vue remplaçant
   const remplacantStyle = document.createElement('style');
   remplacantStyle.textContent = `
-    /* Indicateur de sauvegarde */
-    #saveIndicator {
-      position: fixed;
-      bottom: 16px;
-      right: 16px;
-      padding: 8px 16px;
-      border-radius: 20px;
-      font-size: 0.82rem;
-      font-weight: 500;
-      z-index: 9999;
-      display: none;
-      align-items: center;
-      gap: 6px;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.15);
-      transition: opacity 0.3s;
-    }
-    #saveIndicator.saving {
-      display: flex;
-      background: #fff3cd;
-      color: #856404;
-    }
-    #saveIndicator.saved {
-      display: flex;
-      background: #d1e7dd;
-      color: #0a3622;
-    }
-    #saveIndicator.error {
-      display: flex;
-      background: #f8d7da;
-      color: #842029;
-    }
-    /* Bandeau hors-ligne */
-    #offlineBanner {
-      display: none;
-      position: fixed;
-      top: 0; left: 0; right: 0;
-      background: #dc3545;
-      color: #fff;
-      text-align: center;
-      padding: 6px;
-      font-size: 0.85rem;
-      font-weight: 500;
-      z-index: 99999;
-    }
-    #offlineBanner.visible { display: block; }
-
-
     .role-choice-btn.remplacant { background: #1a6b4a; color: #fff; }
     .role-choice-btn.remplacant:hover { background: #145c3e; }
     .role-choice-btn.direction { background: #1a4a6b; color: #fff; }
@@ -6979,113 +6884,6 @@ function readAbsenceForm(){
   });
 
   window.showRmpPlanning = showRmpPlanning;
-
-  // ─── INDICATEUR DE SAUVEGARDE ────────────────────────────────────────────────
-  let _saveTimer = null;
-  window.showSaveIndicator = function(state, msg) {
-    const el = document.getElementById('saveIndicator');
-    if (!el) return;
-    el.className = state;
-    el.innerHTML = {
-      saving: '⏳ ' + (msg || 'Enregistrement...'),
-      saved:  '✓ ' + (msg || 'Sauvegardé'),
-      error:  '✗ ' + (msg || 'Erreur de sauvegarde')
-    }[state] || msg;
-    clearTimeout(_saveTimer);
-    if (state === 'saved' || state === 'error') {
-      _saveTimer = setTimeout(() => { el.style.opacity = '0'; setTimeout(() => { el.className = ''; el.style.opacity = '1'; }, 300); }, 3000);
-    }
-  };
-
-  // Intercepter gristSetItem pour afficher l'indicateur
-  const _origGristSetItem = window.gristSetItem;
-  if (typeof _origGristSetItem === 'function') {
-    window.gristSetItem = async function(cle, valeur) {
-      showSaveIndicator('saving');
-      try {
-        await _origGristSetItem(cle, valeur);
-        showSaveIndicator('saved');
-      } catch(err) {
-        showSaveIndicator('error', 'Erreur de sauvegarde');
-      }
-    };
-  }
-
-  // ─── MODE HORS-LIGNE ─────────────────────────────────────────────────────────
-  function updateOnlineBanner() {
-    const banner = document.getElementById('offlineBanner');
-    if (!banner) return;
-    if (navigator.onLine) {
-      banner.classList.remove('visible');
-    } else {
-      banner.classList.add('visible');
-    }
-  }
-  window.addEventListener('online',  updateOnlineBanner);
-  window.addEventListener('offline', updateOnlineBanner);
-  updateOnlineBanner();
-
-  // ─── PAVÉ ZIL DISPONIBLES ────────────────────────────────────────────────────
-  window.renderAvailablePanel = function() {
-    const slots = document.getElementById('availSlots');
-    const dateInput = document.getElementById('availDate');
-    if (!slots || !dateInput) return;
-    const dateStr = dateInput.value;
-    if (!dateStr) {
-      slots.innerHTML = '<div class="small muted">Choisissez une date.</div>';
-      return;
-    }
-    const dateLabel = typeof humanDate === 'function' ? humanDate(dateStr) : dateStr;
-    ['Matin', 'APM'].forEach(slot => {
-      const available = typeof getAvailableBrigadiersForReplacementDay === 'function'
-        ? getAvailableBrigadiersForReplacementDay(dateStr, slot) : [];
-      const hasAvail = available.length > 0;
-      const div = document.createElement('div');
-      div.style.cssText = 'flex:1;min-width:200px;background:#fff;border-radius:8px;padding:12px;border:1px solid #e5e7eb;';
-      div.innerHTML =
-        '<div style="font-weight:600;font-size:0.85rem;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px;color:' + (hasAvail ? '#0a3622' : '#842029') + '">' +
-          slot + ' — ' + (hasAvail ? available.length + ' disponible(s)' : 'Aucun') +
-        '</div>' +
-        (hasAvail
-          ? '<div style="color:#1a6b4a;font-size:0.88rem;line-height:1.8;">' + available.map(a => a.brigadier_name).join('<br>') + '</div>'
-          : '<div style="color:#842029;font-style:italic;font-size:0.85rem;">Aucun ZIL disponible</div>'
-        );
-      slots.appendChild(div);
-    });
-  };
-
-  // Mettre à jour après chaque render
-  const _prevRenderAll = window.renderAllPanels;
-  window.renderAllPanels = function() {
-    if (typeof _prevRenderAll === 'function') _prevRenderAll();
-    if (isPanelVisible('availablePanelBody')) {
-      const slots = document.getElementById('availSlots');
-      if (slots) slots.innerHTML = '';
-      renderAvailablePanel();
-    }
-  };
-
-  // ─── CONFIRMATIONS AVANT SUPPRESSION ─────────────────────────────────────────
-  // Intercepter les boutons de suppression existants
-  document.addEventListener('click', function(e) {
-    const btn = e.target.closest('button');
-    if (!btn) return;
-    const txt = (btn.textContent || '').trim().toLowerCase();
-    const id = btn.id || '';
-    // Boutons de suppression connus
-    if (
-      txt === 'supprimer' ||
-      id.includes('delete') ||
-      id.includes('remove') ||
-      btn.classList.contains('delete-btn') ||
-      btn.classList.contains('btn-danger')
-    ) {
-      if (!confirm('Êtes-vous sûr de vouloir supprimer cet élément ? Cette action est irréversible.')) {
-        e.stopImmediatePropagation();
-        e.preventDefault();
-      }
-    }
-  }, true); // capture phase pour intercepter avant les handlers existants
 
   // ─── VUE DIRECTION D'ÉCOLE ───────────────────────────────────────────────────
 
