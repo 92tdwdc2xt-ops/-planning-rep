@@ -4023,6 +4023,67 @@ th:first-child{
 </head>
 <body>
 ${pages.map(p => '<div class="week-page">' + p + '</div>').join("")}
+  <!-- Indicateur sauvegarde + hors-ligne -->
+  <div id="saveIndicator" style="display:none;position:fixed;bottom:16px;right:16px;padding:8px 16px;border-radius:20px;font-size:0.82rem;font-weight:500;z-index:9999;box-shadow:0 2px 8px rgba(0,0,0,0.15);transition:opacity 0.3s;"></div>
+  <div id="offlineBanner" style="display:none;position:fixed;top:0;left:0;right:0;background:#dc3545;color:#fff;text-align:center;padding:6px;font-size:0.85rem;font-weight:500;z-index:99999;">⚠️ Mode hors-ligne — données non synchronisées avec Grist</div>
+  <script>
+  // Indicateur de sauvegarde
+  let _saveTimer = null;
+  window.showSaveIndicator = function(state, msg) {
+    const el = document.getElementById('saveIndicator');
+    if (!el) return;
+    const styles = {
+      saving: 'background:#fff3cd;color:#856404;display:flex;',
+      saved:  'background:#d1e7dd;color:#0a3622;display:flex;',
+      error:  'background:#f8d7da;color:#842029;display:flex;'
+    };
+    const icons = { saving: '⏳ ', saved: '✓ ', error: '✗ ' };
+    el.style.cssText = 'position:fixed;bottom:16px;right:16px;padding:8px 16px;border-radius:20px;font-size:0.82rem;font-weight:500;z-index:9999;box-shadow:0 2px 8px rgba(0,0,0,0.15);' + (styles[state] || '');
+    el.textContent = (icons[state] || '') + (msg || {saving:'Enregistrement...',saved:'Sauvegardé',error:'Erreur de sauvegarde'}[state] || msg);
+    clearTimeout(_saveTimer);
+    if (state !== 'saving') {
+      _saveTimer = setTimeout(() => { el.style.display = 'none'; }, 3000);
+    }
+  };
+
+  // Intercepter gristSetItem
+  document.addEventListener('DOMContentLoaded', function() {
+    const _orig = window.gristSetItem;
+    if (typeof _orig === 'function') {
+      window.gristSetItem = async function(cle, valeur) {
+        showSaveIndicator('saving');
+        try {
+          await _orig(cle, valeur);
+          showSaveIndicator('saved');
+        } catch(err) {
+          showSaveIndicator('error');
+        }
+      };
+    }
+  });
+
+  // Hors-ligne
+  function updateOfflineBanner() {
+    const b = document.getElementById('offlineBanner');
+    if (b) b.style.display = navigator.onLine ? 'none' : 'block';
+  }
+  window.addEventListener('online', updateOfflineBanner);
+  window.addEventListener('offline', updateOfflineBanner);
+  updateOfflineBanner();
+
+  // Confirmation suppression
+  document.addEventListener('click', function(e) {
+    const btn = e.target.closest('button');
+    if (!btn) return;
+    const txt = (btn.textContent || '').trim().toLowerCase();
+    if (txt === 'supprimer' || btn.classList.contains('delete-btn') || btn.classList.contains('btn-danger')) {
+      if (!confirm('Êtes-vous sûr de vouloir supprimer cet élément ? Cette action est irréversible.')) {
+        e.stopImmediatePropagation();
+        e.preventDefault();
+      }
+    }
+  }, true);
+  </script>
 </body>
 </html>`;
 
@@ -5617,9 +5678,7 @@ document.getElementById("schoolsHelp").textContent = referenceSchools.length ? (
 
 // ── Démarrage avec Grist ──────────────────────────────────────
 document.body.style.visibility = 'hidden';
-
 (async function startApp() {
-  // 1. Initialiser le stockage Grist (remplace localStorage)
   if (typeof gristStorageInit === "function") {
     await gristStorageInit();
   }
@@ -6161,11 +6220,67 @@ function readAbsenceForm(){
       const title = cardTitle(card);
       let role = 'shared';
       if(title === 'Créer / modifier une formation' || title === 'Pondérations' || title === 'Référentiels annuels' || title === 'Planning brigadier' || title === 'Planning école') role = 'gestionnaire';
-      if(title === 'Absences' || title === 'Remplacements du jour' || title === 'Conflits à traiter' || title === 'Extraction mensuelle par ZIL') role = 'operatrice';
+      if(title === 'Absences' || title === 'Remplacements du jour' || title === 'Conflits à traiter' || title === 'Extraction mensuelle par ZIL' || title === 'ZIL disponibles') role = 'operatrice';
       if(title === 'Planning complet') role = 'shared';
       card.setAttribute('data-role-scope', role);
     });
   }
+
+  function createAvailableCard(){
+    if(document.getElementById('availableCard')) return;
+    const rightCol = document.querySelector('.right-col');
+    if(!rightCol) return;
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.id = 'availableCard';
+    card.setAttribute('data-role-scope','operatrice');
+    card.innerHTML =
+      '<div class="panel-header">' +
+        '<h2 style="margin:0;">ZIL disponibles</h2>' +
+        '<button id="toggleAvailablePanel" class="light no-print">Afficher</button>' +
+      '</div>' +
+      '<div id="availablePanelBody" class="hidden">' +
+        '<div style="margin-bottom:12px;">' +
+          '<label for="availDate" style="display:block;margin-bottom:4px;font-size:0.85rem;">Date</label>' +
+          '<input type="date" id="availDate" style="padding:6px 10px;border:1px solid #ddd;border-radius:6px;">' +
+        '</div>' +
+        '<div id="availSlots" style="display:flex;gap:12px;flex-wrap:wrap;"></div>' +
+      '</div>';
+    rightCol.appendChild(card);
+    document.getElementById('toggleAvailablePanel').addEventListener('click', function(){
+      togglePanel('toggleAvailablePanel','availablePanelBody');
+      if(isPanelVisible('availablePanelBody')){
+        if(!document.getElementById('availDate').value)
+          document.getElementById('availDate').value = new Date().toISOString().slice(0,10);
+        renderAvailablePanel();
+      }
+    });
+    document.getElementById('availDate').addEventListener('change', function(){
+      document.getElementById('availSlots').innerHTML = '';
+      renderAvailablePanel();
+    });
+  }
+
+  window.renderAvailablePanel = function(){
+    const slots = document.getElementById('availSlots');
+    const dateStr = document.getElementById('availDate') ? document.getElementById('availDate').value : '';
+    if(!slots || !dateStr) return;
+    slots.innerHTML = '';
+    ['Matin','APM'].forEach(function(slot){
+      const available = typeof getAvailableBrigadiersForReplacementDay === 'function'
+        ? getAvailableBrigadiersForReplacementDay(dateStr, slot) : [];
+      const div = document.createElement('div');
+      div.style.cssText = 'flex:1;min-width:180px;background:#fff;border-radius:8px;padding:12px;border:1px solid #e5e7eb;';
+      div.innerHTML =
+        '<div style="font-weight:600;font-size:0.85rem;margin-bottom:8px;color:' + (available.length ? '#0a3622' : '#842029') + '">' +
+          slot + ' — ' + (available.length ? available.length + ' disponible(s)' : 'Aucun') +
+        '</div>' +
+        (available.length
+          ? '<div style="color:#1a6b4a;font-size:0.88rem;line-height:1.8;">' + available.map(function(a){ return escapeHtml(a.brigadier_name); }).join('<br>') + '</div>'
+          : '<div style="color:#842029;font-style:italic;font-size:0.85rem;">Aucun ZIL disponible</div>');
+      slots.appendChild(div);
+    });
+  };
 
   function createMonthlyZilCard(){
     if(document.getElementById('monthlyZilCard')) return;
@@ -6293,9 +6408,12 @@ function readAbsenceForm(){
 
       (s.missions || []).forEach(m => {
         if((m.brigadier || '') !== zil) return;
+        const mSlot = normalizeSlotForAbsence(m.slot || s.slot || '');
+        const isAbsent = getAbsenceByBrigadierForSlot(zil, s.date, mSlot);
+        if(isAbsent) return;
         addRow({
           date: s.date,
-          slot: normalizeSlotForAbsence(m.slot || s.slot || ''),
+          slot: mSlot,
           school: m.school || '',
           level: m.level || '',
           teacher: lookupReplacedTeacherName(m) || m.replaced_teacher_name || '',
@@ -6334,6 +6452,7 @@ function readAbsenceForm(){
     if(typeof populateMonthlyMonthSelect === 'function') populateMonthlyMonthSelect();
     if(typeof previousRenderAllPanels === 'function') previousRenderAllPanels();
     if(isPanelVisible('monthlyZilPanelBody')) renderMonthlyZilExtract();
+    if(isPanelVisible('availablePanelBody')) { document.getElementById('availSlots').innerHTML = ''; renderAvailablePanel(); }
     applyRoleVisibility();
   };
 
@@ -6373,6 +6492,7 @@ function readAbsenceForm(){
 
   createRoleHome();
   createMonthlyZilCard();
+  createAvailableCard();
   assignRoles();
   applyRoleVisibility();
   returnToRoleHome();
