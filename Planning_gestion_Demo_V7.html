@@ -5623,6 +5623,10 @@ document.getElementById("schoolsHelp").textContent = referenceSchools.length ? (
   }
 
   // 2. Charger les données (maintenant depuis Grist)
+  // Debug — vérifier ce qui est dans le cache
+  console.log("[Debug] Clés dans le cache Grist :", Object.keys(_gristCache || {}));
+  console.log("[Debug] REF_ASSIGNMENTS_KEY :", localStorage.getItem("brigade-rep-toulouse-reference-assignments-v1") ? "OK (" + localStorage.getItem("brigade-rep-toulouse-reference-assignments-v1").length + " chars)" : "VIDE");
+  console.log("[Debug] STORAGE_KEY :", localStorage.getItem("brigade-rep-toulouse-brigadier-v66-corrige") ? "OK (" + localStorage.getItem("brigade-rep-toulouse-brigadier-v66-corrige").length + " chars)" : "VIDE");
   loadSchoolYearConfigs();
   renderSchoolYearSettings();
   loadReferenceAssignments();
