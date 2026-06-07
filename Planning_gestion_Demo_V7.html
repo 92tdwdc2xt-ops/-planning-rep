@@ -5888,6 +5888,27 @@ function renderPunctualMissionBox(dateStr, slot){
   }
   metaEl.textContent = available.length ? ('ZIL encore disponibles sur le créneau : ' + available.length + '.') : 'Aucun ZIL encore disponible sur ce créneau.';
   listEl.innerHTML = available.length ? ('<ul class="available-zil-list">' + available.map(a => '<li>' + escapeHtml(a.brigadier_name) + '</li>').join('') + '</ul>') : '<div class="small muted">Aucun ZIL disponible.</div>';
+
+  // Afficher les missions ponctuelles existantes sur ce créneau avec bouton supprimer
+  const nSlot = normalizeSlotForAbsence(slot);
+  const existing = (punctualMissions || []).filter(m => m.date === dateStr && normalizeSlotForAbsence(m.slot || '') === nSlot);
+  if(existing.length){
+    const existingHtml = '<div style="margin-top:12px;border-top:1px dashed var(--border);padding-top:10px;">' +
+      '<div style="font-weight:700;margin-bottom:8px;font-size:0.9rem;">Missions ponctuelles créées</div>' +
+      existing.map(m =>
+        '<div style="background:#f8f9fa;border-radius:6px;padding:8px 10px;margin-bottom:6px;display:flex;align-items:center;justify-content:space-between;gap:8px;">' +
+          '<div style="font-size:0.85rem;">' +
+            '<strong>' + escapeHtml(m.brigadier || '') + '</strong>' +
+            (m.school ? ' → ' + escapeHtml(m.school) : '') +
+            (m.level ? ' ' + escapeHtml(m.level) : '') +
+            (m.replaced_teacher_name ? '<br><span style="color:#888;">' + escapeHtml(m.replaced_teacher_name) + '</span>' : '') +
+          '</div>' +
+          '<button class="danger" type="button" style="white-space:nowrap;" onclick="deletePunctualMission(' + Number(m.id) + ')">Supprimer</button>' +
+        '</div>'
+      ).join('') +
+    '</div>';
+    listEl.innerHTML += existingHtml;
+  }
 }
 function renderReplacementDayPanel(){
   const listEl = document.getElementById('replacementDayList');
