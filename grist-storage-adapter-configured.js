@@ -1,63 +1,39 @@
 /**
- * GRIST STORAGE ADAPTER — Phase 1 (v3)
- * Compatible grist.numerique.gouv.fr
+ * GRIST STORAGE ADAPTER — Phase 1 via Proxy Cloudflare
+ * Utilise le Worker Cloudflare pour contourner le CORS
+ * Compatible avec GitHub Pages (hors widget Grist)
  */
 
+const PROXY_URL = "https://grist-proxy.sebastien-hirsch.workers.dev";
 const GRIST_TABLE = "AppData";
-const _gristCache   = {};
-const _gristRowIds  = {};
-let   _gristReady   = false;
+
+const _gristCache  = {};
+const _gristRowIds = {};
+let   _gristReady  = false;
 
 async function gristInitStorage() {
   try {
-    // grist.numerique.gouv.fr expose l'API via window.grist
-    // On attend jusqu'à 10 secondes
-    let attempts = 0;
-    while (typeof window.grist === "undefined" && attempts < 100) {
-      await new Promise(r => setTimeout(r, 100));
-      attempts++;
-    }
+    const resp = await fetch(`${PROXY_URL}/${GRIST_TABLE}/records`, {
+      method: "GET",
+      headers: { "Content-Type": "application/json" }
+    });
 
-    console.log("[GristAdapter] window.grist =", typeof window.grist);
-    console.log("[GristAdapter] keys =", typeof window.grist !== "undefined" ? Object.keys(window.grist) : "N/A");
+    if (!resp.ok) throw new Error("HTTP " + resp.status);
 
-    if (typeof window.grist === "undefined") {
-      throw new Error("window.grist introuvable après 10s");
-    }
+    const data = await resp.json();
+    const records = data.records || [];
 
-    // Signaler que le widget est prêt
-    if (typeof window.grist.ready === "function") {
-      window.grist.ready({ requiredAccess: "full" });
-    }
-
-    // Attendre encore un peu après ready()
-    await new Promise(r => setTimeout(r, 500));
-
-    // Lire la table AppData
-    let records;
-    if (window.grist.docApi && typeof window.grist.docApi.fetchTable === "function") {
-      records = await window.grist.docApi.fetchTable(GRIST_TABLE);
-    } else if (typeof window.grist.fetchTable === "function") {
-      records = await window.grist.fetchTable(GRIST_TABLE);
-    } else {
-      throw new Error("Aucune méthode fetchTable disponible. Méthodes disponibles : " + Object.keys(window.grist).join(", "));
-    }
-
-    const ids     = records.id     || [];
-    const cles    = records.cle    || records.Cle    || [];
-    const valeurs = records.valeur || records.Valeur || [];
-
-    ids.forEach((id, i) => {
-      const cle    = String(cles[i]    || "");
-      const valeur = String(valeurs[i] || "");
+    records.forEach(rec => {
+      const cle    = rec.fields.cle    || "";
+      const valeur = rec.fields.valeur || "";
       if (cle) {
         _gristCache[cle]  = valeur;
-        _gristRowIds[cle] = id;
+        _gristRowIds[cle] = rec.id;
       }
     });
 
     _gristReady = true;
-    console.log("[GristAdapter] Initialisé —", ids.length, "clés chargées");
+    console.log("[GristAdapter] Initialisé via proxy —", records.length, "clés chargées");
 
   } catch (err) {
     console.warn("[GristAdapter] Erreur init, fallback localStorage :", err.message);
@@ -67,20 +43,41 @@ async function gristInitStorage() {
 
 function gristGetItem(cle) {
   if (!_gristReady) return localStorage.getItem(cle);
-  return Object.prototype.hasOwnProperty.call(_gristCache, cle) ? _gristCache[cle] : null;
+  return Object.prototype.hasOwnProperty.call(_gristCache, cle)
+    ? _gristCache[cle]
+    : null;
 }
 
 async function gristSetItem(cle, valeur) {
   _gristCache[cle] = valeur;
-  if (!_gristReady) { localStorage.setItem(cle, valeur); return; }
+
+  if (!_gristReady) {
+    localStorage.setItem(cle, valeur);
+    return;
+  }
+
   try {
-    const api = window.grist.docApi || window.grist;
     if (_gristRowIds[cle]) {
-      await api.applyUserActions([["UpdateRecord", GRIST_TABLE, _gristRowIds[cle], { cle, valeur }]]);
+      await fetch(`${PROXY_URL}/${GRIST_TABLE}/records`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          records: [{ id: _gristRowIds[cle], fields: { cle, valeur } }]
+        })
+      });
     } else {
-      const result = await api.applyUserActions([["AddRecord", GRIST_TABLE, null, { cle, valeur }]]);
-      if (result && result.retValues && result.retValues[0]) {
-        _gristRowIds[cle] = result.retValues[0];
+      const resp = await fetch(`${PROXY_URL}/${GRIST_TABLE}/records`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          records: [{ fields: { cle, valeur } }]
+        })
+      });
+      if (resp.ok) {
+        const data = await resp.json();
+        if (data.records && data.records[0]) {
+          _gristRowIds[cle] = data.records[0].id;
+        }
       }
     }
   } catch (err) {
@@ -91,10 +88,18 @@ async function gristSetItem(cle, valeur) {
 
 async function gristRemoveItem(cle) {
   delete _gristCache[cle];
-  if (!_gristReady || !_gristRowIds[cle]) { localStorage.removeItem(cle); return; }
+
+  if (!_gristReady || !_gristRowIds[cle]) {
+    localStorage.removeItem(cle);
+    return;
+  }
+
   try {
-    const api = window.grist.docApi || window.grist;
-    await api.applyUserActions([["RemoveRecord", GRIST_TABLE, _gristRowIds[cle]]]);
+    await fetch(`${PROXY_URL}/${GRIST_TABLE}/records`, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ records: [{ id: _gristRowIds[cle] }] })
+    });
     delete _gristRowIds[cle];
   } catch (err) {
     console.error("[GristAdapter] Erreur removeItem :", cle, err);
@@ -108,9 +113,20 @@ function gristInstallStorageOverride() {
     setItem:    localStorage.setItem.bind(localStorage),
     removeItem: localStorage.removeItem.bind(localStorage)
   };
-  Storage.prototype.getItem    = function(cle)         { if (!_gristReady) return _orig.getItem(cle); return gristGetItem(cle); };
-  Storage.prototype.setItem    = function(cle, valeur) { gristSetItem(cle, String(valeur)); };
-  Storage.prototype.removeItem = function(cle)         { gristRemoveItem(cle); };
+
+  Storage.prototype.getItem = function(cle) {
+    if (!_gristReady) return _orig.getItem(cle);
+    return gristGetItem(cle);
+  };
+
+  Storage.prototype.setItem = function(cle, valeur) {
+    gristSetItem(cle, String(valeur));
+  };
+
+  Storage.prototype.removeItem = function(cle) {
+    gristRemoveItem(cle);
+  };
+
   console.log("[GristAdapter] Override localStorage installé");
 }
 
