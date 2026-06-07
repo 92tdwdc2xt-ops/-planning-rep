@@ -6153,12 +6153,68 @@ function readAbsenceForm(){
     return h2 ? h2.textContent.trim() : '';
   }
 
+  function createAvailableCard(){
+    if(document.getElementById('availableCard')) return;
+    var rightCol = document.querySelector('.right-col');
+    if(!rightCol) return;
+    var card = document.createElement('div');
+    card.className = 'card';
+    card.id = 'availableCard';
+    card.innerHTML =
+      '<div class="panel-header">' +
+        '<h2 style="margin:0;">ZIL disponibles</h2>' +
+        '<button id="toggleAvailablePanel" class="light no-print">Afficher</button>' +
+      '</div>' +
+      '<div id="availablePanelBody" class="hidden">' +
+        '<div style="margin-bottom:12px;">' +
+          '<label style="display:block;margin-bottom:4px;font-size:0.85rem;font-weight:600;">Date</label>' +
+          '<input type="date" id="availDate" style="padding:6px 10px;border:1px solid #ddd;border-radius:6px;font-size:0.9rem;">' +
+        '</div>' +
+        '<div id="availSlots" style="display:flex;gap:12px;flex-wrap:wrap;margin-top:8px;"></div>' +
+      '</div>';
+    rightCol.appendChild(card);
+    document.getElementById('toggleAvailablePanel').addEventListener('click', function(){
+      togglePanel('toggleAvailablePanel','availablePanelBody');
+      if(isPanelVisible('availablePanelBody')){
+        if(!document.getElementById('availDate').value)
+          document.getElementById('availDate').value = new Date().toISOString().slice(0,10);
+        renderAvailablePanel();
+      }
+    });
+    document.getElementById('availDate').addEventListener('change', function(){
+      document.getElementById('availSlots').innerHTML = '';
+      renderAvailablePanel();
+    });
+  }
+
+  window.renderAvailablePanel = function(){
+    var slotsEl = document.getElementById('availSlots');
+    var dateEl = document.getElementById('availDate');
+    if(!slotsEl || !dateEl || !dateEl.value) return;
+    var dateStr = dateEl.value;
+    slotsEl.innerHTML = '';
+    ['Matin','APM'].forEach(function(slot){
+      var available = typeof getAvailableBrigadiersForReplacementDay === 'function'
+        ? getAvailableBrigadiersForReplacementDay(dateStr, slot) : [];
+      var div = document.createElement('div');
+      div.style.cssText = 'flex:1;min-width:180px;background:#f8f9fa;border-radius:8px;padding:12px;border:1px solid #e5e7eb;';
+      div.innerHTML =
+        '<div style="font-weight:700;font-size:0.85rem;margin-bottom:8px;color:' + (available.length ? '#0a3622' : '#842029') + ';">' +
+          slot + ' — ' + (available.length ? available.length + ' disponible(s)' : 'Aucun') +
+        '</div>' +
+        (available.length
+          ? '<div style="color:#1a6b4a;font-size:0.88rem;line-height:1.8;">' + available.map(function(a){ return escapeHtml(a.brigadier_name); }).join('<br>') + '</div>'
+          : '<div style="color:#842029;font-style:italic;font-size:0.85rem;">Aucun ZIL disponible</div>');
+      slotsEl.appendChild(div);
+    });
+  };
+
   function assignRoles(){
     document.querySelectorAll('.left-col > .card, .right-col > .card').forEach(card => {
       const title = cardTitle(card);
       let role = 'shared';
       if(title === 'Créer / modifier une formation' || title === 'Pondérations' || title === 'Référentiels annuels' || title === 'Planning brigadier' || title === 'Planning école') role = 'gestionnaire';
-      if(title === 'Absences' || title === 'Remplacements du jour' || title === 'Conflits à traiter' || title === 'Extraction mensuelle par ZIL') role = 'operatrice';
+      if(title === 'Absences' || title === 'Remplacements du jour' || title === 'Conflits à traiter' || title === 'Extraction mensuelle par ZIL' || title === 'ZIL disponibles') role = 'operatrice';
       if(title === 'Planning complet') role = 'shared';
       card.setAttribute('data-role-scope', role);
     });
@@ -6333,6 +6389,7 @@ function readAbsenceForm(){
     if(typeof populateMonthlyMonthSelect === 'function') populateMonthlyMonthSelect();
     if(typeof previousRenderAllPanels === 'function') previousRenderAllPanels();
     if(isPanelVisible('monthlyZilPanelBody')) renderMonthlyZilExtract();
+    if(isPanelVisible('availablePanelBody')){ document.getElementById('availSlots').innerHTML=''; renderAvailablePanel(); }
     applyRoleVisibility();
   };
 
@@ -6372,6 +6429,7 @@ function readAbsenceForm(){
 
   createRoleHome();
   createMonthlyZilCard();
+  createAvailableCard();
   assignRoles();
   applyRoleVisibility();
   returnToRoleHome();
