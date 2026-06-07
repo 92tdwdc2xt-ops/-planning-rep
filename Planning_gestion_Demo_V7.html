@@ -7007,6 +7007,50 @@ function readAbsenceForm(){
 
 })();
 
+// ── Indicateur de sauvegarde ──────────────────────────────
+var _saveTimer = null;
+function showSaveIndicator(state) {
+  var el = document.getElementById('grist-save-indicator');
+  if (!el) return;
+  var cfg = {
+    saving: {bg:'#fff3cd', color:'#856404', txt:'⏳ Enregistrement...'},
+    saved:  {bg:'#d1e7dd', color:'#0a3622', txt:'✓ Sauvegardé'},
+    error:  {bg:'#f8d7da', color:'#842029', txt:'✗ Erreur de sauvegarde'}
+  };
+  var c = cfg[state] || cfg.saved;
+  el.style.cssText = 'display:flex;position:fixed;bottom:16px;right:16px;padding:8px 16px;border-radius:20px;font-size:0.82rem;font-weight:500;z-index:9999;box-shadow:0 2px 8px rgba(0,0,0,0.15);background:' + c.bg + ';color:' + c.color + ';';
+  el.textContent = c.txt;
+  clearTimeout(_saveTimer);
+  if (state !== 'saving') {
+    _saveTimer = setTimeout(function(){ el.style.display = 'none'; }, 3000);
+  }
+}
+
+// Intercepter gristSetItem après initialisation
+var _gristSetItemOrig = window.gristSetItem;
+if (typeof _gristSetItemOrig === 'function') {
+  window.gristSetItem = async function(cle, valeur) {
+    showSaveIndicator('saving');
+    try {
+      await _gristSetItemOrig(cle, valeur);
+      showSaveIndicator('saved');
+    } catch(err) {
+      showSaveIndicator('error');
+    }
+  };
+}
+
+// Hors-ligne
+function updateOfflineBanner() {
+  var b = document.getElementById('grist-offline-banner');
+  if (b) b.style.display = navigator.onLine ? 'none' : 'block';
+}
+window.addEventListener('online', updateOfflineBanner);
+window.addEventListener('offline', updateOfflineBanner);
+updateOfflineBanner();
+
 </script>
+<div id="grist-save-indicator" style="display:none;"></div>
+<div id="grist-offline-banner" style="display:none;position:fixed;top:0;left:0;right:0;background:#dc3545;color:#fff;text-align:center;padding:6px;font-size:0.85rem;font-weight:500;z-index:99999;">⚠️ Mode hors-ligne — données non synchronisées avec Grist</div>
 </body>
 </html>
