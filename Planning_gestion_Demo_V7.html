@@ -6443,16 +6443,71 @@ function readAbsenceForm(){
     /* Disponibles épinglés */
     #pinnedAvailable {
       display: none;
-      background: #d1e7dd;
-      border: 1px solid #a3cfbb;
+      background: #f8f9fa;
+      border: 1px solid #dee2e6;
       border-radius: 10px;
-      padding: 10px 16px;
-      margin-bottom: 12px;
+      padding: 12px 16px;
+      margin: 12px 16px;
       font-size: 0.88rem;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.07);
     }
     #pinnedAvailable.visible { display: block; }
-    #pinnedAvailable strong { color: #0a3622; }
-    #pinnedAvailable .avail-names { color: #145c3e; margin-top: 4px; }
+    #pinnedAvailable .pin-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 8px;
+    }
+    #pinnedAvailable .pin-title {
+      font-weight: 600;
+      color: #333;
+      font-size: 0.9rem;
+    }
+    #pinnedAvailable .pin-close {
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: #888;
+      font-size: 1rem;
+      padding: 0 4px;
+    }
+    #pinnedAvailable .pin-close:hover { color: #333; }
+    #pinnedAvailable .pin-date-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+    #pinnedAvailable .pin-date-row input {
+      padding: 5px 10px;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      font-size: 0.85rem;
+    }
+    #pinnedAvailable .pin-slots {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    #pinnedAvailable .pin-slot {
+      flex: 1;
+      min-width: 200px;
+      background: #fff;
+      border-radius: 8px;
+      padding: 10px 12px;
+      border: 1px solid #e5e7eb;
+    }
+    #pinnedAvailable .pin-slot-title {
+      font-weight: 600;
+      font-size: 0.82rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 6px;
+    }
+    #pinnedAvailable .pin-slot-title.ok { color: #0a3622; }
+    #pinnedAvailable .pin-slot-title.none { color: #842029; }
+    #pinnedAvailable .pin-names { color: #1a6b4a; font-size: 0.85rem; line-height: 1.6; }
+    #pinnedAvailable .pin-none { color: #842029; font-size: 0.85rem; font-style: italic; }
 
     .role-choice-btn.remplacant { background: #1a6b4a; color: #fff; }
     .role-choice-btn.remplacant:hover { background: #145c3e; }
@@ -7003,47 +7058,71 @@ function readAbsenceForm(){
   updateOnlineBanner();
 
   // ─── DISPONIBLES ÉPINGLÉS (vue opératrice) ───────────────────────────────────
+  let _pinHidden = false;
+
+  function renderPinSlot(dateStr, slot) {
+    const available = typeof getAvailableBrigadiersForReplacementDay === 'function'
+      ? getAvailableBrigadiersForReplacementDay(dateStr, slot) : [];
+    const hasAvail = available.length > 0;
+    return '<div class="pin-slot">' +
+      '<div class="pin-slot-title ' + (hasAvail ? 'ok' : 'none') + '">' + slot + ' — ' + (hasAvail ? available.length + ' disponible(s)' : 'Aucun') + '</div>' +
+      (hasAvail
+        ? '<div class="pin-names">' + available.map(a => a.brigadier_name).join('<br>') + '</div>'
+        : '<div class="pin-none">Aucun ZIL disponible</div>'
+      ) +
+    '</div>';
+  }
+
   function updatePinnedAvailable() {
     const pin = document.getElementById('pinnedAvailable');
     if (!pin) return;
-    // Seulement visible en mode opératrice
-    if (window.currentRoleMode !== 'operatrice') { pin.classList.remove('visible'); return; }
-    const dateStr = typeof getReplacementDayDate === 'function' ? getReplacementDayDate() : '';
-    const slot = typeof getReplacementDaySlot === 'function' ? getReplacementDaySlot() : 'Matin';
+    if (window.currentRoleMode !== 'operatrice' || _pinHidden) { pin.classList.remove('visible'); return; }
+    const dateInput = document.getElementById('pinDate');
+    const dateStr = dateInput ? dateInput.value : (typeof getReplacementDayDate === 'function' ? getReplacementDayDate() : '');
     if (!dateStr) { pin.classList.remove('visible'); return; }
-    const available = typeof getAvailableBrigadiersForReplacementDay === 'function'
-      ? getAvailableBrigadiersForReplacementDay(dateStr, slot)
-      : [];
     pin.classList.add('visible');
-    if (available.length) {
-      pin.innerHTML = '<strong>✅ ' + available.length + ' ZIL disponible(s) — ' + slot + ' ' + dateStr + '</strong>' +
-        '<div class="avail-names">' + available.map(a => a.brigadier_name).join(' · ') + '</div>';
-    } else {
-      pin.innerHTML = '<strong style="color:#842029;">❌ Aucun ZIL disponible — ' + slot + ' ' + dateStr + '</strong>';
-    }
+    const slotsHtml = renderPinSlot(dateStr, 'Matin') + renderPinSlot(dateStr, 'APM');
+    const dateLabel = typeof humanDate === 'function' ? humanDate(dateStr) : dateStr;
+    pin.innerHTML =
+      '<div class="pin-header">' +
+        '<span class="pin-title">👥 Disponibles — ' + dateLabel + '</span>' +
+        '<button class="pin-close" id="pinCloseBtn" title="Fermer">✕</button>' +
+      '</div>' +
+      '<div class="pin-date-row">' +
+        '<label style="font-size:0.82rem;color:#666;">Changer de date :</label>' +
+        '<input type="date" id="pinDate" value="' + dateStr + '">' +
+      '</div>' +
+      '<div class="pin-slots">' + slotsHtml + '</div>';
+
+    document.getElementById('pinCloseBtn').addEventListener('click', function() {
+      _pinHidden = true;
+      pin.classList.remove('visible');
+    });
+    document.getElementById('pinDate').addEventListener('change', function() {
+      updatePinnedAvailable();
+    });
   }
 
-  // Injecter le bandeau disponibles dans la vue opératrice
+  // Injecter le bandeau dans la vue opératrice
   const _origEnterRole = window.enterRole;
   window.enterRole = function(role) {
     if (typeof _origEnterRole === 'function') _origEnterRole(role);
     if (role === 'operatrice') {
-      // Créer le bandeau si pas encore là
+      _pinHidden = false;
       if (!document.getElementById('pinnedAvailable')) {
         const pin = document.createElement('div');
         pin.id = 'pinnedAvailable';
-        const main = document.querySelector('main') || document.querySelector('.main-content') || document.body;
-        main.insertBefore(pin, main.firstChild);
+        const ref = document.querySelector('.panels-grid') || document.querySelector('.main-panels') || document.querySelector('main');
+        if (ref) ref.parentNode.insertBefore(pin, ref);
+        else document.body.insertBefore(pin, document.body.firstChild);
       }
+      // Date par défaut = aujourd'hui
+      const today = new Date().toISOString().slice(0,10);
+      const dateInput = document.getElementById('pinDate');
+      if (dateInput && !dateInput.value) dateInput.value = today;
       updatePinnedAvailable();
     }
   };
-
-  // Mettre à jour le bandeau quand date/créneau change
-  ['replacementDayDate', 'replacementDaySlot'].forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.addEventListener('change', updatePinnedAvailable);
-  });
 
   // Mettre à jour après chaque render
   const _prevRenderAll = window.renderAllPanels;
