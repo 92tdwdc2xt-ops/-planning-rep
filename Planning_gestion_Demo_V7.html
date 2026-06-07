@@ -5616,6 +5616,9 @@ document.getElementById("createPonderationBlockBtn").addEventListener("click", c
 document.getElementById("schoolsHelp").textContent = referenceSchools.length ? (referenceSchools.length + " école(s) reconnue(s) dans la base importée.") : "Aucun référentiel importé.";
 
 // ── Démarrage avec Grist ──────────────────────────────────────
+// Masquer le contenu pendant le chargement
+document.body.style.visibility = 'hidden';
+
 (async function startApp() {
   // 1. Initialiser le stockage Grist (remplace localStorage)
   if (typeof gristStorageInit === "function") {
@@ -5623,10 +5626,6 @@ document.getElementById("schoolsHelp").textContent = referenceSchools.length ? (
   }
 
   // 2. Charger les données (maintenant depuis Grist)
-  // Debug — vérifier ce qui est dans le cache
-  console.log("[Debug] Clés dans le cache Grist :", Object.keys(_gristCache || {}));
-  console.log("[Debug] REF_ASSIGNMENTS_KEY :", localStorage.getItem("brigade-rep-toulouse-reference-assignments-v1") ? "OK (" + localStorage.getItem("brigade-rep-toulouse-reference-assignments-v1").length + " chars)" : "VIDE");
-  console.log("[Debug] STORAGE_KEY :", localStorage.getItem("brigade-rep-toulouse-brigadier-v66-corrige") ? "OK (" + localStorage.getItem("brigade-rep-toulouse-brigadier-v66-corrige").length + " chars)" : "VIDE");
   loadSchoolYearConfigs();
   renderSchoolYearSettings();
   loadReferenceAssignments();
@@ -5654,6 +5653,8 @@ document.getElementById("schoolsHelp").textContent = referenceSchools.length ? (
   updateHistoryInfo();
   hideRemovedAbsenceModules();
   renderAllPanels();
+  // Afficher le contenu une fois chargé
+  document.body.style.visibility = 'visible';
 })();
 // ─────────────────────────────────────────────────────────────
 
@@ -6134,8 +6135,16 @@ function readAbsenceForm(){
       document.getElementById('backToRoleHomeBtn').addEventListener('click', returnToRoleHome);
     }
 
-    document.getElementById('enterGestionnaireBtn').addEventListener('click', function(){ enterRole('gestionnaire'); });
-    document.getElementById('enterOperatriceBtn').addEventListener('click', function(){ enterRole('operatrice'); });
+    document.getElementById('enterGestionnaireBtn').addEventListener('click', function(){
+      const pwd = prompt("Mot de passe Gestionnaire :");
+      if (pwd === "Melissa") { enterRole('gestionnaire'); }
+      else if (pwd !== null) { alert("Mot de passe incorrect."); }
+    });
+    document.getElementById('enterOperatriceBtn').addEventListener('click', function(){
+      const pwd = prompt("Mot de passe Opératrice :");
+      if (pwd === "brigade") { enterRole('operatrice'); }
+      else if (pwd !== null) { alert("Mot de passe incorrect."); }
+    });
     document.getElementById('enterRemplacantBtn').addEventListener('click', function(){ enterRemplacantView(); });
     document.getElementById('enterDirectionBtn').addEventListener('click', function(){ enterDirectionView(); });
   }
