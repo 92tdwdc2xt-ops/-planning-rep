@@ -6140,7 +6140,7 @@ function readAbsenceForm(){
           '<button type="button" class="role-choice-btn remplacant" id="enterRemplacantBtn"><span class="icon">📱</span><span>Remplaçant·e</span></button>' +
           '<button type="button" class="role-choice-btn direction" id="enterDirectionBtn"><span class="icon">🏫</span><span>Direction</span></button>' +
           '<div style="grid-column:1/-1;display:flex;justify-content:center;">' +
-          '<button type="button" class="role-choice-btn coordo" id="enterCoordoBtn" style="max-width:280px;width:100%;"><span class="icon">📊</span><span>Planning REP+</span></button>' +
+            '<button type="button" class="role-choice-btn coordo" id="enterCoordoBtn" style="max-width:280px;width:100%;"><span class="icon">📊</span><span>Planning REP+</span></button>' +
           '</div>' +
         '</div>' +
       '</div>';
@@ -6496,10 +6496,10 @@ function readAbsenceForm(){
   remplacantStyle.textContent = `
     .role-choice-btn.remplacant { background: #1a6b4a; color: #fff; }
     .role-choice-btn.remplacant:hover { background: #145c3e; }
-    .role-choice-btn.direction { background: #1a4a6b; color: #fff; }
-    .role-choice-btn.direction:hover { background: #153d5c; }
     .role-choice-btn.coordo { background: #6b1a4a; color: #fff; }
     .role-choice-btn.coordo:hover { background: #5c1540; }
+    .role-choice-btn.direction { background: #1a4a6b; color: #fff; }
+    .role-choice-btn.direction:hover { background: #153d5c; }
 
     #directionScreen {
       display: none;
@@ -6999,9 +6999,10 @@ function readAbsenceForm(){
 
   window.showRmpPlanning = showRmpPlanning;
 
-  // ─── VUE COORDINATEURS REP+ ──────────────────────────────────────────────────
+  // ─── VUE PLANNING REP+ (COORDINATEURS) ──────────────────────────────────────
+  var MOIS_FR_C = ['','Janvier','Fevrier','Mars','Avril','Mai','Juin','Juillet','Aout','Septembre','Octobre','Novembre','Decembre'];
 
-  const coordoScreen = document.createElement('div');
+  var coordoScreen = document.createElement('div');
   coordoScreen.id = 'coordoScreen';
   coordoScreen.style.cssText = 'display:none;min-height:100vh;background:#f5f7fa;font-family:system-ui,sans-serif;';
   coordoScreen.innerHTML =
@@ -7012,248 +7013,148 @@ function readAbsenceForm(){
       '<button id="coordoExcelBtn" style="background:rgba(255,255,255,0.2);border:none;color:#fff;border-radius:8px;padding:6px 14px;cursor:pointer;font-size:0.9rem;">Excel</button>' +
     '</div>' +
     '<div style="padding:20px 24px;">' +
-      '<div style="background:#fff;border-radius:12px;padding:14px 16px;margin-bottom:20px;display:flex;align-items:center;gap:12px;box-shadow:0 1px 4px rgba(0,0,0,0.08);">' +
+      '<div style="background:#fff;border-radius:12px;padding:14px 16px;margin-bottom:16px;display:flex;align-items:center;gap:12px;box-shadow:0 1px 4px rgba(0,0,0,0.08);">' +
         '<label style="font-size:0.9rem;font-weight:600;color:#333;">Mois :</label>' +
         '<select id="coordoMonth" style="padding:7px 12px;border:1px solid #ddd;border-radius:8px;font-size:0.9rem;min-width:160px;max-width:200px;"></select>' +
       '</div>' +
       '<div style="background:#fff;border-radius:12px;padding:14px 16px;margin-bottom:16px;box-shadow:0 1px 4px rgba(0,0,0,0.08);">' +
-        '<input id="coordoSearch" type="text" placeholder="Rechercher sur toute l'ann&eacute;e (formation, &eacute;cole, lieu...)" style="width:100%;padding:8px 12px;border:1px solid #ddd;border-radius:8px;font-size:0.9rem;box-sizing:border-box;">' +
-        '<div id="coordoSearchResults" style="margin-top:12px;display:none;"></div>' +
+        '<input id="coordoSearch" type="text" placeholder="Rechercher sur toute l'annee (formation, ecole, lieu...)" style="width:100%;padding:8px 12px;border:1px solid #ddd;border-radius:8px;font-size:0.9rem;box-sizing:border-box;">' +
+        '<div id="coordoSearchResults" style="margin-top:10px;display:none;"></div>' +
       '</div>' +
       '<div id="coordoContent"></div>' +
     '</div>';
   document.body.appendChild(coordoScreen);
 
+  function getCoordoRows(monthVal) {
+    return (formations||[]).filter(function(f){ return f.date && f.date.slice(0,7)===monthVal; })
+      .sort(function(a,b){ return a.date.localeCompare(b.date)||(({'Matin':0,'Apres-midi':1,'Journee':2}[a.slot]||0)-({'Matin':0,'Apres-midi':1,'Journee':2}[b.slot]||0)); });
+  }
+
+  function coordoTableHTML(fms) {
+    if(!fms.length) return '<div style="padding:16px;text-align:center;color:#888;">Aucune session.</div>';
+    var html = '<div style="background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,0.08);"><table style="width:100%;border-collapse:collapse;font-size:0.88rem;">';
+    html += '<thead><tr style="background:#6b1a4a;color:#fff;"><th style="padding:10px 14px;text-align:left;">Date</th><th style="padding:10px 14px;text-align:left;">Creneau</th><th style="padding:10px 14px;text-align:left;">Formation / Ponderation</th><th style="padding:10px 14px;text-align:left;">Lieu</th><th style="padding:10px 14px;text-align:left;">Ecoles</th></tr></thead><tbody>';
+    fms.forEach(function(f,i){
+      var isPond = f.eventType==='ponderation';
+      var badge = '<span style="display:inline-block;background:'+(isPond?'#fff3e0':'#e3f0ff')+';color:'+(isPond?'#6b3a1a':'#1a4a6b')+';font-size:0.7rem;font-weight:700;padding:1px 6px;border-radius:6px;margin-right:4px;">'+(isPond?'Pond.':'Form.')+'</span>';
+      var schools = (f.schools||[]).join(', ')||'&mdash;';
+      html += '<tr style="background:'+(i%2?'#faf5f9':'#fff')+';border-bottom:1px solid #f0f0f0;">';
+      html += '<td style="padding:10px 14px;font-weight:600;white-space:nowrap;">'+(typeof humanDate==='function'?humanDate(f.date):f.date)+'</td>';
+      html += '<td style="padding:10px 14px;white-space:nowrap;">'+escapeHtml(f.slot||'&mdash;')+'</td>';
+      html += '<td style="padding:10px 14px;">'+badge+escapeHtml(f.displayTitle||f.title||'&mdash;')+'</td>';
+      html += '<td style="padding:10px 14px;color:#555;">'+escapeHtml(f.location||'&mdash;')+'</td>';
+      html += '<td style="padding:10px 14px;">'+escapeHtml(schools)+'</td>';
+      html += '</tr>';
+    });
+    html += '</tbody></table></div>';
+    return html;
+  }
+
   function populateCoordoMonths() {
-    const sel = document.getElementById('coordoMonth');
-    if (!sel) return;
-    const fms = formations || [];
-    const months = [...new Set(fms.map(f => f.date ? f.date.slice(0,7) : '').filter(Boolean))].sort();
-    const moisFr = ['','Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
-    sel.innerHTML = months.map(m => {
-      const [y, mo] = m.split('-');
-      return '<option value="' + m + '">' + (moisFr[parseInt(mo)] || m) + ' ' + y + '</option>';
+    var sel = document.getElementById('coordoMonth');
+    if(!sel) return;
+    var months = [];
+    (formations||[]).forEach(function(f){ if(f.date&&f.date.length>=7){var m=f.date.slice(0,7);if(months.indexOf(m)===-1)months.push(m);}});
+    months.sort();
+    sel.innerHTML = months.map(function(m){
+      var p=m.split('-');
+      return '<option value="'+m+'">'+(MOIS_FR_C[parseInt(p[1])]||m)+' '+p[0]+'</option>';
     }).join('');
-    // Sélectionner le mois courant ou le plus proche
-    const now = new Date().toISOString().slice(0,7);
-    const closest = months.find(m => m >= now) || months[months.length-1];
-    if (closest) sel.value = closest;
+    var now = new Date().toISOString().slice(0,7);
+    var closest = months.filter(function(m){return m>=now;})[0]||months[months.length-1];
+    if(closest) sel.value = closest;
   }
 
   function renderCoordoPlanning() {
-    const content = document.getElementById('coordoContent');
-    const monthVal = document.getElementById('coordoMonth') ? document.getElementById('coordoMonth').value : '';
-    if (!content || !monthVal) return;
+    var el = document.getElementById('coordoContent');
+    var monthVal = document.getElementById('coordoMonth')?document.getElementById('coordoMonth').value:'';
+    if(!el||!monthVal) return;
+    var fms = getCoordoRows(monthVal);
+    var p = monthVal.split('-');
+    el.innerHTML = '<div style="margin-bottom:10px;"><strong style="color:#6b1a4a;">'+(MOIS_FR_C[parseInt(p[1])]||monthVal)+' '+p[0]+'</strong> &mdash; '+fms.length+' session(s)</div>'+coordoTableHTML(fms);
+  }
 
-    const fms = (formations || [])
-      .filter(f => f.date && f.date.slice(0,7) === monthVal)
-      .sort((a,b) => {
-        if (a.date !== b.date) return a.date.localeCompare(b.date);
-        const slotOrder = {'Matin':0,'Après-midi':1,'Journée':2};
-        return (slotOrder[a.slot]||0) - (slotOrder[b.slot]||0);
-      });
-
-    if (!fms.length) {
-      content.innerHTML = '<div style="background:#fff;border-radius:12px;padding:24px;text-align:center;color:#888;box-shadow:0 1px 4px rgba(0,0,0,0.08);">Aucune formation ou pondération ce mois.</div>';
-      return;
-    }
-
-    const moisFr = ['','Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
-    const [y, mo] = monthVal.split('-');
-    const titre = (moisFr[parseInt(mo)] || monthVal) + ' ' + y;
-
-    let html = '<div id="coordoPrintZone">';
-    html += '<div style="margin-bottom:16px;">';
-    html += '<h2 style="font-size:1.2rem;font-weight:700;color:#6b1a4a;margin:0 0 4px 0;">Planning REP+ — ' + titre + '</h2>';
-    html += '<div style="font-size:0.85rem;color:#888;">' + fms.length + ' session(s)</div>';
-    html += '</div>';
-
-    html += '<div style="background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,0.08);">';
-    html += '<table style="width:100%;border-collapse:collapse;font-size:0.9rem;">';
-    html += '<thead><tr style="background:#6b1a4a;color:#fff;">';
-    html += '<th style="padding:12px 16px;text-align:left;font-weight:600;">Date</th>';
-    html += '<th style="padding:12px 16px;text-align:left;font-weight:600;">Créneau</th>';
-    html += '<th style="padding:12px 16px;text-align:left;font-weight:600;">Formation / Pondération</th>';
-    html += '<th style="padding:12px 16px;text-align:left;font-weight:600;">Lieu</th>';
-    html += '<th style="padding:12px 16px;text-align:left;font-weight:600;">Écoles concernées</th>';
-    html += '</tr></thead><tbody>';
-
-    fms.forEach((f, i) => {
-      const bg = i % 2 === 0 ? '#fff' : '#faf5f9';
-      const isPond = f.eventType === 'ponderation';
-      const typeColor = isPond ? '#6b3a1a' : '#1a4a6b';
-      const typeBg = isPond ? '#fff3e0' : '#e3f0ff';
-
-      // Écoles
-      const schools = (f.schools || []).join(', ') || '—';
-
-      // Titre avec badge type
-      const typeLabel = isPond ? 'Pondération' : 'Formation';
-      const titleBadge = '<span style="display:inline-block;background:' + typeBg + ';color:' + typeColor + ';font-size:0.72rem;font-weight:700;padding:2px 7px;border-radius:10px;margin-right:6px;">' + typeLabel + '</span>';
-
-      html += '<tr style="background:' + bg + ';border-bottom:1px solid #f0f0f0;">';
-      html += '<td style="padding:12px 16px;font-weight:600;white-space:nowrap;">' + (typeof humanDate === 'function' ? humanDate(f.date) : f.date) + '</td>';
-      html += '<td style="padding:12px 16px;white-space:nowrap;">' + escapeHtml(f.slot || '—') + '</td>';
-      html += '<td style="padding:12px 16px;">' + titleBadge + escapeHtml(f.displayTitle || f.title || '—') + '</td>';
-      html += '<td style="padding:12px 16px;color:#555;">' + escapeHtml(f.location || '—') + '</td>';
-      html += '<td style="padding:12px 16px;color:#333;">' + escapeHtml(schools) + '</td>';
-      html += '</tr>';
-    });
-
-    html += '</tbody></table></div></div>';
-    content.innerHTML = html;
+  function renderCoordoSearch(q) {
+    var results = document.getElementById('coordoSearchResults');
+    var content = document.getElementById('coordoContent');
+    if(!results) return;
+    q = (q||'').toLowerCase().trim();
+    if(!q){ results.style.display='none'; results.innerHTML=''; if(content) content.style.display='block'; return; }
+    if(content) content.style.display='none';
+    var fms = (formations||[]).filter(function(f){
+      return [f.displayTitle||f.title||'',f.location||'',(f.schools||[]).join(' '),f.date||'',f.slot||''].join(' ').toLowerCase().includes(q);
+    }).sort(function(a,b){return a.date.localeCompare(b.date);});
+    results.style.display = 'block';
+    results.innerHTML = '<div style="font-size:0.82rem;color:#888;margin-bottom:8px;">'+fms.length+' resultat(s)</div>'+coordoTableHTML(fms);
   }
 
   window.enterCoordoView = function() {
-    const home = document.getElementById('roleHomeScreen');
-    if (home) home.style.display = 'none';
+    var home = document.getElementById('roleHomeScreen');
+    if(home) home.style.display = 'none';
     coordoScreen.style.display = 'block';
+    document.getElementById('coordoSearch').value = '';
+    document.getElementById('coordoSearchResults').style.display = 'none';
+    document.getElementById('coordoContent').style.display = 'block';
     populateCoordoMonths();
     renderCoordoPlanning();
   };
 
-  document.getElementById('coordoBackBtn').addEventListener('click', function() {
+  document.getElementById('coordoBackBtn').addEventListener('click', function(){
     coordoScreen.style.display = 'none';
-    const home = document.getElementById('roleHomeScreen');
-    if (home) home.style.display = 'flex';
+    var home = document.getElementById('roleHomeScreen');
+    if(home) home.style.display = 'flex';
   });
 
   document.getElementById('coordoMonth').addEventListener('change', renderCoordoPlanning);
 
-  // Recherche sur toute l'année
-  function renderCoordoSearch(query) {
-    const results = document.getElementById('coordoSearchResults');
-    if (!results) return;
-    const q = (query || '').toLowerCase().trim();
-    if (!q) { results.style.display = 'none'; results.innerHTML = ''; return; }
-
-    const fms = (formations || []).filter(f => {
-      const txt = [
-        f.displayTitle || f.title || '',
-        f.location || '',
-        f.slot || '',
-        (f.schools || []).join(' '),
-        f.date || ''
-      ].join(' ').toLowerCase();
-      return txt.includes(q);
-    }).sort((a,b) => a.date.localeCompare(b.date));
-
-    if (!fms.length) {
-      results.style.display = 'block';
-      results.innerHTML = '<div style="color:#888;font-style:italic;font-size:0.88rem;padding:8px 0;">Aucun résultat pour "' + escapeHtml(query) + '"</div>';
-      return;
-    }
-
-    let html = '<div style="font-size:0.82rem;color:#888;margin-bottom:8px;">' + fms.length + ' résultat(s) pour "' + escapeHtml(query) + '"</div>';
-    html += '<div style="background:#fff;border-radius:10px;overflow:hidden;border:1px solid #e5e7eb;">';
-    html += '<table style="width:100%;border-collapse:collapse;font-size:0.87rem;">';
-    html += '<thead><tr style="background:#6b1a4a;color:#fff;">';
-    ['Date','Créneau','Formation / Pondération','Lieu','Écoles'].forEach(h => {
-      html += '<th style="padding:8px 12px;text-align:left;font-weight:600;">' + h + '</th>';
-    });
-    html += '</tr></thead><tbody>';
-    fms.forEach((f, i) => {
-      const isPond = f.eventType === 'ponderation';
-      const badge = '<span style="display:inline-block;background:' + (isPond?'#fff3e0':'#e3f0ff') + ';color:' + (isPond?'#6b3a1a':'#1a4a6b') + ';font-size:0.7rem;font-weight:700;padding:1px 5px;border-radius:6px;margin-right:4px;">' + (isPond?'Pond.':'Form.') + '</span>';
-      const schools = (f.schools||[]).join(', ') || '—';
-      html += '<tr style="background:' + (i%2?'#faf5f9':'#fff') + ';border-bottom:1px solid #f0f0f0;">';
-      html += '<td style="padding:8px 12px;white-space:nowrap;font-weight:600;">' + (typeof humanDate==='function'?humanDate(f.date):f.date) + '</td>';
-      html += '<td style="padding:8px 12px;white-space:nowrap;">' + escapeHtml(f.slot||'—') + '</td>';
-      html += '<td style="padding:8px 12px;">' + badge + escapeHtml(f.displayTitle||f.title||'—') + '</td>';
-      html += '<td style="padding:8px 12px;color:#555;">' + escapeHtml(f.location||'—') + '</td>';
-      html += '<td style="padding:8px 12px;">' + escapeHtml(schools) + '</td>';
-      html += '</tr>';
-    });
-    html += '</tbody></table></div>';
-    results.innerHTML = html;
-    results.style.display = 'block';
-  }
-
-  document.getElementById('coordoSearch').addEventListener('input', function() {
+  document.getElementById('coordoSearch').addEventListener('input', function(){
     renderCoordoSearch(this.value);
-    // Masquer vue mensuelle si recherche active
-    const content = document.getElementById('coordoContent');
-    const monthDiv = document.querySelector('#coordoScreen .coord-month-sel');
-    if (this.value.trim()) {
-      if (content) content.style.display = 'none';
-    } else {
-      if (content) content.style.display = 'block';
-    }
   });
 
-  document.getElementById('coordoPrintBtn').addEventListener('click', function() {
-    const zone = document.getElementById('coordoPrintZone');
-    if (!zone) return;
-    const monthSel = document.getElementById('coordoMonth');
-    const moisFr = ['','Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
-    const [y, mo] = (monthSel ? monthSel.value : '').split('-');
-    const titre = (moisFr[parseInt(mo)] || '') + ' ' + (y || '');
-
-    const win = window.open('', '_blank');
-    win.document.write('<html><head><title>Planning REP+ — ' + titre + '</title>');
-    win.document.write('<style>');
-    win.document.write('body{font-family:Arial,sans-serif;margin:24px;color:#333;}');
-    win.document.write('h2{color:#6b1a4a;margin-bottom:4px;}');
-    win.document.write('table{width:100%;border-collapse:collapse;font-size:0.85rem;margin-top:16px;}');
-    win.document.write('thead tr{background:#6b1a4a;color:#fff;}');
-    win.document.write('th,td{padding:10px 12px;text-align:left;border-bottom:1px solid #e0e0e0;}');
-    win.document.write('tr:nth-child(even){background:#faf5f9;}');
-    win.document.write('.badge{display:inline-block;font-size:0.72rem;font-weight:700;padding:2px 7px;border-radius:10px;margin-right:6px;}');
-    win.document.write('.pond{background:#fff3e0;color:#6b3a1a;}');
-    win.document.write('.form{background:#e3f0ff;color:#1a4a6b;}');
-    win.document.write('@media print{button{display:none;}}');
-    win.document.write('</style></head><body>');
-    win.document.write('<h2>Planning REP+ — ' + titre + '</h2>');
-    win.document.write('<div style="font-size:0.85rem;color:#888;margin-bottom:16px;">Circonscription Toulouse REP+</div>');
-
-    const fms = (formations || [])
-      .filter(f => f.date && f.date.slice(0,7) === (monthSel ? monthSel.value : ''))
-      .sort((a,b) => a.date.localeCompare(b.date));
-
-    win.document.write('<table><thead><tr>');
-    win.document.write('<th>Date</th><th>Créneau</th><th>Formation / Pondération</th><th>Lieu</th><th>Écoles concernées</th>');
-    win.document.write('</tr></thead><tbody>');
-
-    fms.forEach(f => {
-      const isPond = f.eventType === 'ponderation';
-      const badge = '<span class="badge ' + (isPond ? 'pond' : 'form') + '">' + (isPond ? 'Pondération' : 'Formation') + '</span>';
-      const schools = (f.schools || []).join(', ') || '—';
-      win.document.write('<tr>');
-      win.document.write('<td style="white-space:nowrap;font-weight:600;">' + (typeof humanDate === 'function' ? humanDate(f.date) : f.date) + '</td>');
-      win.document.write('<td style="white-space:nowrap;">' + (f.slot || '—') + '</td>');
-      win.document.write('<td>' + badge + (f.displayTitle || f.title || '—') + '</td>');
-      win.document.write('<td>' + (f.location || '—') + '</td>');
-      win.document.write('<td>' + schools + '</td>');
-      win.document.write('</tr>');
+  document.getElementById('coordoPrintBtn').addEventListener('click', function(){
+    var monthVal = document.getElementById('coordoMonth')?document.getElementById('coordoMonth').value:'';
+    var p = monthVal.split('-');
+    var titre = (MOIS_FR_C[parseInt(p[1])]||monthVal)+' '+p[0];
+    var fms = getCoordoRows(monthVal);
+    var win = window.open('','_blank');
+    win.document.write('<!DOCTYPE html><html><head><meta charset="utf-8"><title>Planning REP+ '+titre+'</title>');
+    win.document.write('<style>body{font-family:Arial,sans-serif;margin:24px;color:#333;font-size:11pt;}h2{color:#6b1a4a;}table{width:100%;border-collapse:collapse;margin-top:14px;}thead tr{background:#6b1a4a;color:#fff;}th,td{padding:8px 10px;text-align:left;border-bottom:1px solid #e0e0e0;}tr:nth-child(even){background:#faf5f9;}.p{background:#fff3e0;color:#6b3a1a;border-radius:5px;padding:1px 5px;font-size:9pt;font-weight:700;}.f{background:#e3f0ff;color:#1a4a6b;border-radius:5px;padding:1px 5px;font-size:9pt;font-weight:700;}.ft{font-size:8pt;color:#aaa;margin-top:14px;}</style>');
+    win.document.write('</head><body><h2>Planning REP+ &mdash; '+titre+'</h2>');
+    win.document.write('<div style="font-size:9pt;color:#888;margin-bottom:10px;">'+fms.length+' session(s)</div>');
+    win.document.write('<table><thead><tr><th>Date</th><th>Creneau</th><th>Formation / Ponderation</th><th>Lieu</th><th>Ecoles</th></tr></thead><tbody>');
+    fms.forEach(function(f){
+      var isPond=f.eventType==='ponderation';
+      win.document.write('<tr><td style="white-space:nowrap;font-weight:600;">'+(typeof humanDate==='function'?humanDate(f.date):f.date)+'</td>');
+      win.document.write('<td style="white-space:nowrap;">'+(f.slot||'')+'</td>');
+      win.document.write('<td><span class="'+(isPond?'p':'f')+'">'+(isPond?'Pond.':'Form.')+'</span> '+(f.displayTitle||f.title||'')+'</td>');
+      win.document.write('<td>'+(f.location||'')+'</td>');
+      win.document.write('<td>'+((f.schools||[]).join(', '))+'</td></tr>');
     });
-
-    win.document.write('</tbody></table>');
-    win.document.write('<div style="margin-top:20px;font-size:0.75rem;color:#aaa;">Généré le ' + new Date().toLocaleDateString('fr-FR') + '</div>');
-    win.document.write('</body></html>');
+    win.document.write('</tbody></table><div class="ft">Genere le '+new Date().toLocaleDateString('fr-FR')+'</div></body></html>');
     win.document.close();
-    setTimeout(function(){ win.print(); }, 500);
+    setTimeout(function(){win.print();},500);
   });
 
-  // Export Excel
-  document.getElementById('coordoExcelBtn').addEventListener('click', function() {
-    const monthSel = document.getElementById('coordoMonth');
-    const monthVal = monthSel ? monthSel.value : '';
-    const moisFr = ['','Janvier','Fevrier','Mars','Avril','Mai','Juin','Juillet','Aout','Septembre','Octobre','Novembre','Decembre'];
-    const fms = (formations || []).filter(f => f.date && f.date.slice(0,7) === monthVal).sort((a,b) => a.date.localeCompare(b.date));
-    const rows = [['Date','Creneau','Type','Formation / Ponderation','Lieu','Ecoles concernees']];
-    fms.forEach(f => rows.push([
-      typeof humanDate === 'function' ? humanDate(f.date) : f.date,
-      f.slot || '',
-      f.eventType === 'ponderation' ? 'Ponderation' : 'Formation',
-      f.displayTitle || f.title || '',
-      f.location || '',
-      (f.schools || []).join(', ')
-    ]));
-    const csv = rows.map(r => r.map(c => '"' + String(c||'').replace(/"/g,'""') + '"').join(';')).join('\r\n');
-    const blob = new Blob(['\uFEFF' + csv], {type:'text/csv;charset=utf-8;'});
-    const a = document.createElement('a');
+  document.getElementById('coordoExcelBtn').addEventListener('click', function(){
+    var monthVal = document.getElementById('coordoMonth')?document.getElementById('coordoMonth').value:'';
+    var fms = getCoordoRows(monthVal);
+    var rows = [['Date','Creneau','Type','Formation/Ponderation','Lieu','Ecoles']];
+    fms.forEach(function(f){
+      rows.push([
+        typeof humanDate==='function'?humanDate(f.date):f.date,
+        f.slot||'',
+        f.eventType==='ponderation'?'Ponderation':'Formation',
+        f.displayTitle||f.title||'',
+        f.location||'',
+        (f.schools||[]).join(', ')
+      ]);
+    });
+    var csv = rows.map(function(r){return r.map(function(c){return '"'+String(c||'').replace(/"/g,'""')+'"';}).join(';');}).join('
+');
+    var blob = new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8;'});
+    var a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = 'Planning-REP-' + monthVal + '.csv';
+    a.download = 'Planning-REP-'+monthVal+'.csv';
     a.click();
   });
 
