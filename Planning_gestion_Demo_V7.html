@@ -280,7 +280,7 @@ td:first-child{
 </style>
 
 </head>
-<body>
+<body style="visibility:hidden;">
 <div class="wrap">
   <div class="global-header">
     <div class="global-header-left">
@@ -7016,6 +7016,10 @@ function readAbsenceForm(){
         '<label style="font-size:0.9rem;font-weight:600;color:#333;">Mois :</label>' +
         '<select id="coordoMonth" style="padding:7px 12px;border:1px solid #ddd;border-radius:8px;font-size:0.9rem;min-width:160px;max-width:200px;"></select>' +
       '</div>' +
+      '<div style="background:#fff;border-radius:12px;padding:14px 16px;margin-bottom:16px;box-shadow:0 1px 4px rgba(0,0,0,0.08);">' +
+        '<input id="coordoSearch" type="text" placeholder="Rechercher sur toute l'ann&eacute;e (formation, &eacute;cole, lieu...)" style="width:100%;padding:8px 12px;border:1px solid #ddd;border-radius:8px;font-size:0.9rem;box-sizing:border-box;">' +
+        '<div id="coordoSearchResults" style="margin-top:12px;display:none;"></div>' +
+      '</div>' +
       '<div id="coordoContent"></div>' +
     '</div>';
   document.body.appendChild(coordoScreen);
@@ -7115,6 +7119,67 @@ function readAbsenceForm(){
   });
 
   document.getElementById('coordoMonth').addEventListener('change', renderCoordoPlanning);
+
+  // Recherche sur toute l'année
+  function renderCoordoSearch(query) {
+    const results = document.getElementById('coordoSearchResults');
+    if (!results) return;
+    const q = (query || '').toLowerCase().trim();
+    if (!q) { results.style.display = 'none'; results.innerHTML = ''; return; }
+
+    const fms = (formations || []).filter(f => {
+      const txt = [
+        f.displayTitle || f.title || '',
+        f.location || '',
+        f.slot || '',
+        (f.schools || []).join(' '),
+        f.date || ''
+      ].join(' ').toLowerCase();
+      return txt.includes(q);
+    }).sort((a,b) => a.date.localeCompare(b.date));
+
+    if (!fms.length) {
+      results.style.display = 'block';
+      results.innerHTML = '<div style="color:#888;font-style:italic;font-size:0.88rem;padding:8px 0;">Aucun résultat pour "' + escapeHtml(query) + '"</div>';
+      return;
+    }
+
+    let html = '<div style="font-size:0.82rem;color:#888;margin-bottom:8px;">' + fms.length + ' résultat(s) pour "' + escapeHtml(query) + '"</div>';
+    html += '<div style="background:#fff;border-radius:10px;overflow:hidden;border:1px solid #e5e7eb;">';
+    html += '<table style="width:100%;border-collapse:collapse;font-size:0.87rem;">';
+    html += '<thead><tr style="background:#6b1a4a;color:#fff;">';
+    ['Date','Créneau','Formation / Pondération','Lieu','Écoles'].forEach(h => {
+      html += '<th style="padding:8px 12px;text-align:left;font-weight:600;">' + h + '</th>';
+    });
+    html += '</tr></thead><tbody>';
+    fms.forEach((f, i) => {
+      const isPond = f.eventType === 'ponderation';
+      const badge = '<span style="display:inline-block;background:' + (isPond?'#fff3e0':'#e3f0ff') + ';color:' + (isPond?'#6b3a1a':'#1a4a6b') + ';font-size:0.7rem;font-weight:700;padding:1px 5px;border-radius:6px;margin-right:4px;">' + (isPond?'Pond.':'Form.') + '</span>';
+      const schools = (f.schools||[]).join(', ') || '—';
+      html += '<tr style="background:' + (i%2?'#faf5f9':'#fff') + ';border-bottom:1px solid #f0f0f0;">';
+      html += '<td style="padding:8px 12px;white-space:nowrap;font-weight:600;">' + (typeof humanDate==='function'?humanDate(f.date):f.date) + '</td>';
+      html += '<td style="padding:8px 12px;white-space:nowrap;">' + escapeHtml(f.slot||'—') + '</td>';
+      html += '<td style="padding:8px 12px;">' + badge + escapeHtml(f.displayTitle||f.title||'—') + '</td>';
+      html += '<td style="padding:8px 12px;color:#555;">' + escapeHtml(f.location||'—') + '</td>';
+      html += '<td style="padding:8px 12px;">' + escapeHtml(schools) + '</td>';
+      html += '</tr>';
+    });
+    html += '</tbody></table></div>';
+    results.innerHTML = html;
+    results.style.display = 'block';
+  }
+
+  document.getElementById('coordoSearch').addEventListener('input', function() {
+    renderCoordoSearch(this.value);
+    // Masquer vue mensuelle si recherche active
+    const content = document.getElementById('coordoContent');
+    const monthDiv = document.querySelector('#coordoScreen .coord-month-sel');
+    if (this.value.trim()) {
+      if (content) content.style.display = 'none';
+    } else {
+      if (content) content.style.display = 'block';
+    }
+  });
 
   document.getElementById('coordoPrintBtn').addEventListener('click', function() {
     const zone = document.getElementById('coordoPrintZone');
