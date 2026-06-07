@@ -6139,7 +6139,9 @@ function readAbsenceForm(){
           '<button type="button" class="role-choice-btn secondary" id="enterOperatriceBtn"><span class="icon">📋</span><span>Opératrice</span></button>' +
           '<button type="button" class="role-choice-btn remplacant" id="enterRemplacantBtn"><span class="icon">📱</span><span>Remplaçant·e</span></button>' +
           '<button type="button" class="role-choice-btn direction" id="enterDirectionBtn"><span class="icon">🏫</span><span>Direction</span></button>' +
-          '<button type="button" class="role-choice-btn coordo" id="enterCoordoBtn"><span class="icon">📊</span><span>Coordinateurs REP+</span></button>' +
+          '<div style="grid-column:1/-1;display:flex;justify-content:center;">' +
+          '<button type="button" class="role-choice-btn coordo" id="enterCoordoBtn" style="max-width:280px;width:100%;"><span class="icon">📊</span><span>Planning REP+</span></button>' +
+          '</div>' +
         '</div>' +
       '</div>';
     document.body.insertBefore(home, wrap);
@@ -7002,20 +7004,20 @@ function readAbsenceForm(){
   const coordoScreen = document.createElement('div');
   coordoScreen.id = 'coordoScreen';
   coordoScreen.style.cssText = 'display:none;min-height:100vh;background:#f5f7fa;font-family:system-ui,sans-serif;';
-  coordoScreen.innerHTML = `
-    <div style="background:#6b1a4a;color:#fff;padding:16px 24px;display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:10;">
-      <button id="coordoBackBtn" style="background:rgba(255,255,255,0.2);border:none;color:#fff;border-radius:8px;padding:6px 12px;cursor:pointer;font-size:0.9rem;">← Accueil</button>
-      <h1 style="margin:0;font-size:1.1rem;flex:1;">📊 Planning REP+ — Vue Coordinateurs</h1>
-      <button id="coordoPrintBtn" style="background:rgba(255,255,255,0.2);border:none;color:#fff;border-radius:8px;padding:6px 14px;cursor:pointer;font-size:0.9rem;">🖨️ Exporter PDF</button>
-    </div>
-    <div style="padding:20px 24px;">
-      <div style="background:#fff;border-radius:12px;padding:16px;margin-bottom:20px;display:flex;align-items:center;gap:16px;box-shadow:0 1px 4px rgba(0,0,0,0.08);">
-        <label style="font-size:0.9rem;font-weight:600;color:#333;">Mois :</label>
-        <select id="coordoMonth" style="padding:8px 12px;border:1px solid #ddd;border-radius:8px;font-size:0.95rem;"></select>
-      </div>
-      <div id="coordoContent"></div>
-    </div>
-  `;
+  coordoScreen.innerHTML =
+    '<div style="background:#6b1a4a;color:#fff;padding:16px 24px;display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:10;">' +
+      '<button id="coordoBackBtn" style="background:rgba(255,255,255,0.2);border:none;color:#fff;border-radius:8px;padding:6px 12px;cursor:pointer;font-size:0.9rem;">&larr; Accueil</button>' +
+      '<h1 style="margin:0;font-size:1.1rem;flex:1;">Planning REP+</h1>' +
+      '<button id="coordoPrintBtn" style="background:rgba(255,255,255,0.2);border:none;color:#fff;border-radius:8px;padding:6px 14px;cursor:pointer;font-size:0.9rem;margin-right:6px;">PDF</button>' +
+      '<button id="coordoExcelBtn" style="background:rgba(255,255,255,0.2);border:none;color:#fff;border-radius:8px;padding:6px 14px;cursor:pointer;font-size:0.9rem;">Excel</button>' +
+    '</div>' +
+    '<div style="padding:20px 24px;">' +
+      '<div style="background:#fff;border-radius:12px;padding:14px 16px;margin-bottom:20px;display:flex;align-items:center;gap:12px;box-shadow:0 1px 4px rgba(0,0,0,0.08);">' +
+        '<label style="font-size:0.9rem;font-weight:600;color:#333;">Mois :</label>' +
+        '<select id="coordoMonth" style="padding:7px 12px;border:1px solid #ddd;border-radius:8px;font-size:0.9rem;min-width:160px;max-width:200px;"></select>' +
+      '</div>' +
+      '<div id="coordoContent"></div>' +
+    '</div>';
   document.body.appendChild(coordoScreen);
 
   function populateCoordoMonths() {
@@ -7165,6 +7167,29 @@ function readAbsenceForm(){
     win.document.write('</body></html>');
     win.document.close();
     setTimeout(function(){ win.print(); }, 500);
+  });
+
+  // Export Excel
+  document.getElementById('coordoExcelBtn').addEventListener('click', function() {
+    const monthSel = document.getElementById('coordoMonth');
+    const monthVal = monthSel ? monthSel.value : '';
+    const moisFr = ['','Janvier','Fevrier','Mars','Avril','Mai','Juin','Juillet','Aout','Septembre','Octobre','Novembre','Decembre'];
+    const fms = (formations || []).filter(f => f.date && f.date.slice(0,7) === monthVal).sort((a,b) => a.date.localeCompare(b.date));
+    const rows = [['Date','Creneau','Type','Formation / Ponderation','Lieu','Ecoles concernees']];
+    fms.forEach(f => rows.push([
+      typeof humanDate === 'function' ? humanDate(f.date) : f.date,
+      f.slot || '',
+      f.eventType === 'ponderation' ? 'Ponderation' : 'Formation',
+      f.displayTitle || f.title || '',
+      f.location || '',
+      (f.schools || []).join(', ')
+    ]));
+    const csv = rows.map(r => r.map(c => '"' + String(c||'').replace(/"/g,'""') + '"').join(';')).join('\r\n');
+    const blob = new Blob(['\uFEFF' + csv], {type:'text/csv;charset=utf-8;'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'Planning-REP-' + monthVal + '.csv';
+    a.click();
   });
 
   // ─── VUE DIRECTION D'ÉCOLE ───────────────────────────────────────────────────
