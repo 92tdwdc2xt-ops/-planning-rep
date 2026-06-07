@@ -6161,45 +6161,52 @@ function readAbsenceForm(){
     return h2 ? h2.textContent.trim() : '';
   }
 
+  function createAvailableCard(){
+    if(document.getElementById('availableCard')) return;
+    const rightCol = document.querySelector('.right-col');
+    if(!rightCol) return;
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.id = 'availableCard';
+    card.setAttribute('data-role-scope','operatrice');
+    card.innerHTML =
+      '<div class="panel-header">' +
+        '<h2 style="margin:0;">ZIL disponibles</h2>' +
+        '<button id="toggleAvailablePanel" class="light no-print">Afficher</button>' +
+      '</div>' +
+      '<div id="availablePanelBody" class="hidden">' +
+        '<div class="row2 no-print" style="margin-bottom:12px;">' +
+          '<div><label for="availDate">Date</label>' +
+          '<input type="date" id="availDate" style="width:100%;"></div>' +
+        '</div>' +
+        '<div id="availSlots" style="display:flex;gap:12px;flex-wrap:wrap;"></div>' +
+      '</div>';
+    rightCol.appendChild(card);
+    document.getElementById('toggleAvailablePanel').addEventListener('click', function(){
+      togglePanel('toggleAvailablePanel', 'availablePanelBody');
+      if(isPanelVisible('availablePanelBody')) {
+        document.getElementById('availDate').value = new Date().toISOString().slice(0,10);
+        renderAvailablePanel();
+      }
+    });
+    document.getElementById('availDate').addEventListener('change', function(){
+      document.getElementById('availSlots').innerHTML = '';
+      renderAvailablePanel();
+    });
+  }
+
   function assignRoles(){
     document.querySelectorAll('.left-col > .card, .right-col > .card').forEach(card => {
       const title = cardTitle(card);
       let role = 'shared';
       if(title === 'Créer / modifier une formation' || title === 'Pondérations' || title === 'Référentiels annuels' || title === 'Planning brigadier' || title === 'Planning école') role = 'gestionnaire';
-      if(title === 'Absences' || title === 'Remplacements du jour' || title === 'Conflits à traiter' || title === 'Extraction mensuelle par ZIL') role = 'operatrice';
+      if(title === 'Absences' || title === 'Remplacements du jour' || title === 'Conflits à traiter' || title === 'Extraction mensuelle par ZIL' || title === 'ZIL disponibles') role = 'operatrice';
       if(title === 'Planning complet') role = 'shared';
       card.setAttribute('data-role-scope', role);
     });
   }
 
   function createMonthlyZilCard(){
-    // Créer le pavé Disponibles si pas encore là
-    if (!document.getElementById('availableCard')) {
-      const availCard = document.createElement('div');
-      availCard.className = 'card';
-      availCard.id = 'availableCard';
-      availCard.innerHTML =
-        '<div class="panel-header">' +
-          '<h2 style="margin:0;">ZIL disponibles</h2>' +
-          '<button id="toggleAvailablePanel" class="light no-print">Afficher</button>' +
-        '</div>' +
-        '<div id="availablePanelBody" class="hidden">' +
-          '<div class="row2 no-print" style="margin-bottom:12px;">' +
-            '<div><label for="availDate">Date</label>' +
-            '<input type="date" id="availDate" style="width:100%;"></div>' +
-          '</div>' +
-          '<div id="availSlots" style="display:flex;gap:12px;flex-wrap:wrap;"></div>' +
-        '</div>';
-      // Insérer avant le card monthlyZil ou à la fin de la colonne droite
-      const rightCol = document.querySelector('.col-right') || document.querySelector('.right-col');
-      if (rightCol) rightCol.appendChild(availCard);
-    }
-    document.getElementById('toggleAvailablePanel').addEventListener('click', function(){
-      togglePanel('toggleAvailablePanel', 'availablePanelBody');
-      if (isPanelVisible('availablePanelBody')) renderAvailablePanel();
-    });
-    document.getElementById('availDate').addEventListener('change', renderAvailablePanel);
-
     if(document.getElementById('monthlyZilCard')) return;
     const rightCol = document.querySelector('.right-col');
     if(!rightCol) return;
@@ -6413,6 +6420,7 @@ function readAbsenceForm(){
 
   createRoleHome();
   createMonthlyZilCard();
+  createAvailableCard();
   assignRoles();
   applyRoleVisibility();
   returnToRoleHome();
