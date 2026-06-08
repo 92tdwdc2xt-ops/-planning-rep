@@ -3218,8 +3218,10 @@ function nextSchoolHalfDay(dateStr, slot){
   return { date: formatDate(d), slot: "Matin" };
 }
 function isFormationSlot(dateStr, slot){
+  // Bloque toute demi-journée occupée par une formation (tous types confondus, sauf pondération)
   return formations.some(function(f){
-    return (f.eventType || 'formation') === 'formation' &&
+    const et = f.eventType || 'formation';
+    return et !== 'ponderation' &&
            f.date === dateStr && f.slot === slot;
   });
 }
