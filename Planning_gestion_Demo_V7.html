@@ -13,7 +13,7 @@
 }
 *{box-sizing:border-box}
 body{margin:0;font-family:Arial,sans-serif;background:var(--bg);color:var(--text)}
-.wrap{max-width:1750px;margin:0 auto;padding:24px}
+.wrap{display:none;max-width:1750px;margin:0 auto;padding:24px}
 .global-header{display:flex;justify-content:space-between;align-items:flex-start;gap:18px;margin-bottom:18px}
 .global-header-left{display:flex;flex-direction:column;gap:10px}
 .global-header-actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
@@ -281,7 +281,7 @@ td:first-child{
 
 </head>
 <body>
-<div class="wrap">
+<div class="wrap" id="appShell" style="display:none;">
   <div class="global-header">
     <div class="global-header-left">
       <div style="display:flex;align-items:baseline;gap:16px;flex-wrap:wrap;">
@@ -3217,6 +3217,28 @@ function nextSchoolHalfDay(dateStr, slot){
   } while (d.getDay() === 0 || d.getDay() === 6 || isSchoolClosureDate(formatDate(d)));
   return { date: formatDate(d), slot: "Matin" };
 }
+function isFormationSlot(dateStr, slot){
+  return formations.some(function(f){
+    return (f.eventType || 'formation') === 'formation' &&
+           f.date === dateStr && f.slot === slot;
+  });
+}
+function nextAvailableHalfDay(dateStr, slot){
+  var cur = nextSchoolHalfDay(dateStr, slot);
+  var n = 0;
+  while(isFormationSlot(cur.date, cur.slot) && n < 200){
+    cur = nextSchoolHalfDay(cur.date, cur.slot); n++;
+  }
+  return cur;
+}
+function nextAvailableOpenHalfDay(dateStr, slot){
+  var cur = nextOpenSchoolHalfDay(dateStr, slot);
+  var n = 0;
+  while(isFormationSlot(cur.date, cur.slot) && n < 200){
+    cur = nextSchoolHalfDay(cur.date, cur.slot); n++;
+  }
+  return cur;
+}
 function buildPonderationBlockSequence(){
   const startGroupId = document.getElementById("blockStartGroup")?.value || "";
   const endGroupId = document.getElementById("blockEndGroup")?.value || "";
@@ -3239,7 +3261,7 @@ function buildPonderationBlockSequence(){
   }
 
   const entries = [];
-  const normalizedStart = nextOpenSchoolHalfDay(startDate, startSlot);
+  const normalizedStart = nextAvailableOpenHalfDay(startDate, startSlot);
   let currentDate = normalizedStart.date;
   let currentSlot = normalizedStart.slot;
 
@@ -3251,7 +3273,7 @@ function buildPonderationBlockSequence(){
       slot: currentSlot,
       ponderationNumber: number
     });
-    const nxt = nextSchoolHalfDay(currentDate, currentSlot);
+    const nxt = nextAvailableHalfDay(currentDate, currentSlot);
     currentDate = nxt.date;
     currentSlot = nxt.slot;
   }
@@ -5623,10 +5645,6 @@ document.body.style.visibility = 'hidden';
   }
 
   // 2. Charger les données (maintenant depuis Grist)
-  // Debug — vérifier ce qui est dans le cache
-  console.log("[Debug] Clés dans le cache Grist :", Object.keys(_gristCache || {}));
-  console.log("[Debug] REF_ASSIGNMENTS_KEY :", localStorage.getItem("planning-brigadiers") ? "OK (" + localStorage.getItem("planning-brigadiers").length + " chars)" : "VIDE");
-  console.log("[Debug] STORAGE_KEY :", localStorage.getItem("planning-formations") ? "OK (" + localStorage.getItem("planning-formations").length + " chars)" : "VIDE");
   loadSchoolYearConfigs();
   renderSchoolYearSettings();
   loadReferenceAssignments();
@@ -5654,7 +5672,18 @@ document.body.style.visibility = 'hidden';
   updateHistoryInfo();
   hideRemovedAbsenceModules();
   renderAllPanels();
-  document.body.style.visibility = 'visible';
+  // Attendre que returnToRoleHome soit défini (IIFE suivant)
+  var _waitHome = setInterval(function(){
+    if(typeof returnToRoleHome === 'function'){
+      clearInterval(_waitHome);
+      returnToRoleHome();
+      document.body.style.visibility = 'visible';
+    }
+  }, 20);
+  // Sécurité : révéler après 2s dans tous les cas
+  setTimeout(function(){
+    document.body.style.visibility = 'visible';
+  }, 2000);
 })();// ─────────────────────────────────────────────────────────────
 
 
@@ -6124,8 +6153,6 @@ function readAbsenceForm(){
     if(document.getElementById('roleHomeScreen')) return;
     const wrap = document.querySelector('.wrap');
     if(!wrap) return;
-    wrap.id = 'appShell';
-    wrap.style.display = 'none';
 
     const home = document.createElement('div');
     home.id = 'roleHomeScreen';
